@@ -1,0 +1,4 @@
+[submodule "amdsmi"]
+	path = amdsmi
+	url = git@github.com:ROCm/amdsmi.git
+	shallow = true
