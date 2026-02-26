@@ -9,7 +9,10 @@ use std::{
 };
 use thiserror::Error;
 
+pub mod utils;
+
 use crate::bindings::*;
+use crate::utils::*;
 
 #[allow(warnings)]
 pub mod bindings {
@@ -17,18 +20,13 @@ pub mod bindings {
 }
 
 const LIB_PATH: &str = "libamd_smi.so";
-const INIT_FLAG: amdsmi_init_flags_t = amdsmi_init_flags_t_AMDSMI_INIT_AMD_GPUS;
-const UUID_LENGTH: u32 = AMDSMI_GPU_UUID_SIZE;
-
-const SUCCESS: amdsmi_status_t = amdsmi_status_t_AMDSMI_STATUS_SUCCESS;
-const OUT_OF_RESSOURCES: amdsmi_status_t = amdsmi_status_t_AMDSMI_STATUS_OUT_OF_RESOURCES;
 
 /// Error while using the AMD SMI library.
 ///
 /// This wraps an [`amdsmi_status_t`] provided by the underlying C functions.
 #[derive(Debug, Error)]
-#[error("amd-smi library error: {0}")]
-pub struct AmdError(pub amdsmi_status_t);
+#[error("amd-smi library error: {0:?}")]
+pub struct AmdError(pub AmdStatus);
 
 #[derive(Debug, Error)]
 pub enum AmdInitError {
@@ -42,15 +40,6 @@ pub struct AmdSmi {
     amdsmi: libamd_smi,
 }
 
-impl Drop for AmdSmi {
-    fn drop(&mut self) {
-        // Shut down the AMD-SMI library and release all internal resources.
-        // SAFETY: The function expects a valid, initialized library instance.
-        // The shutdown is called only once when the last reference is dropped.
-        unsafe { self.amdsmi.amdsmi_shut_down() };
-    }
-}
-
 pub struct AmdSocketHandle {
     amdsmi: Arc<AmdSmi>,
     inner: amdsmi_socket_handle,
@@ -61,28 +50,28 @@ pub struct AmdProcessorHandle {
     inner: amdsmi_processor_handle,
 }
 
-#[derive(Debug, Default, Clone, Copy)]
-pub struct AmdEnergyConsumptionInfo {
-    /// The energy consumption value of an AMD GPU device since the last boot in micro Joules.
-    pub energy: u64,
-    /// Precision factor of the energy counter in micro Joules.
-    pub resolution: f32,
-    /// The time during which the energy value is recovered in ns.
-    pub timestamp: u64,
-}
-
 /// Checking the value of [`amdsmi_status_t`] to return an error or success.
 fn check_status(status: amdsmi_status_t) -> Result<(), AmdError> {
-    if status == SUCCESS {
+    let status = AmdStatus::from(status);
+    if status == AmdStatus::Success {
         Ok(())
     } else {
         Err(AmdError(status))
     }
 }
 
+impl Drop for AmdSmi {
+    fn drop(&mut self) {
+        // Shut down the AMD-SMI library and release all internal resources.
+        // SAFETY: The function expects a valid, initialized library instance.
+        // The shutdown is called only once when the last reference is dropped.
+        unsafe { self.amdsmi.amdsmi_shut_down() };
+    }
+}
+
 impl AmdSmi {
     /// Initialize and start amd-smi library with [`INIT_FLAG`].
-    pub fn init() -> Result<Arc<Self>, AmdInitError> {
+    pub fn init(flags: InitFlags) -> Result<Arc<Self>, AmdInitError> {
         // SAFETY: The library must exist at the specified path, otherwise `libamd_smi::new` returns an error.
         // This operation involves raw FFI interaction and assumes the dynamic loader succeeds.
         let amdsmi = unsafe { libamd_smi::new(LIB_PATH)? };
@@ -90,10 +79,9 @@ impl AmdSmi {
         // SAFETY: The function expects a valid library instance and valid flags.
         // According to the AMD-SMI documentation, the function fully initializes internal structures for GPU discovery.
         // The return code `amdsmi_status_t` is checked to ensure initialization succeeded before using the library.
-        let result = unsafe { amdsmi.amdsmi_init(INIT_FLAG.into()) };
-        if result != SUCCESS {
-            return Err(AmdInitError::Init(AmdError(result)));
-        }
+        let result = unsafe { amdsmi.amdsmi_init(flags.bits().into()) };
+        check_status(result).map_err(AmdInitError::Init)?;
+
         Ok(Arc::new(AmdSmi { amdsmi }))
     }
 }
@@ -130,9 +118,7 @@ impl AmdInterface for Arc<AmdSmi> {
             self.amdsmi
                 .amdsmi_get_socket_handles(&mut socket_count, null_mut())
         };
-        if result != SUCCESS {
-            return Err(AmdError(result));
-        }
+        check_status(result)?;
 
         // Allocate an uninitialized vector of socket handles.
         // SAFETY: Each element is zeroed and considered valid for the FFI call and AMD-SMI library will fill each handle in the second call.
@@ -145,18 +131,17 @@ impl AmdInterface for Arc<AmdSmi> {
             self.amdsmi
                 .amdsmi_get_socket_handles(&mut socket_count, socket_handles.as_mut_ptr())
         };
-        if result == SUCCESS {
-            socket_handles.truncate(socket_count as usize);
-            Ok(socket_handles
-                .into_iter()
-                .map(|s| AmdSocketHandle {
-                    amdsmi: Arc::clone(self),
-                    inner: s,
-                })
-                .collect())
-        } else {
-            Err(AmdError(result))
-        }
+        check_status(result)?;
+
+        socket_handles.truncate(socket_count as usize);
+
+        Ok(socket_handles
+            .into_iter()
+            .map(|s| AmdSocketHandle {
+                amdsmi: Arc::clone(self),
+                inner: s,
+            })
+            .collect())
     }
 }
 
@@ -184,9 +169,7 @@ impl SocketHandle for AmdSocketHandle {
                 null_mut(),
             )
         };
-        if result != SUCCESS {
-            return Err(AmdError(result));
-        }
+        check_status(result)?;
 
         // Allocate an uninitialized vector of socket handles.
         // SAFETY: Each element is zeroed and considered valid for the FFI call and AMD-SMI library will fill each handle in the second call.
@@ -202,18 +185,15 @@ impl SocketHandle for AmdSocketHandle {
                 processor_handles.as_mut_ptr(),
             )
         };
-        if result == SUCCESS {
-            processor_handles.truncate(processor_count as usize);
-            Ok(processor_handles
-                .into_iter()
-                .map(|s| AmdProcessorHandle {
-                    amdsmi: Arc::clone(&self.amdsmi),
-                    inner: s,
-                })
-                .collect())
-        } else {
-            Err(AmdError(result))
-        }
+        check_status(result)?;
+        processor_handles.truncate(processor_count as usize);
+        Ok(processor_handles
+            .into_iter()
+            .map(|s| AmdProcessorHandle {
+                amdsmi: Arc::clone(&self.amdsmi),
+                inner: s,
+            })
+            .collect())
     }
 }
 
@@ -268,8 +248,8 @@ pub trait ProcessorHandle {
 impl ProcessorHandle for AmdProcessorHandle {
     /// Retrieves the UUID of the GPU device.
     fn device_uuid(&self) -> Result<String, AmdError> {
-        let mut uuid_buffer = vec![0 as c_char; UUID_LENGTH as usize];
-        let mut uuid_length = UUID_LENGTH;
+        let mut uuid_buffer = vec![0 as c_char; AMDSMI_GPU_UUID_SIZE as usize];
+        let mut uuid_length = AMDSMI_GPU_UUID_SIZE;
 
         // SAFETY: According to AMD-SMI documentation, the function will not write beyond `uuid_length`.
         // `uuid_length` must be initialized to the buffer size, and the function will update it with the actual length.
@@ -289,7 +269,7 @@ impl ProcessorHandle for AmdProcessorHandle {
         let c_str = if uuid_buffer[(uuid_length - 1) as usize] == 0 {
             unsafe { CStr::from_ptr(uuid_buffer.as_ptr()) }
         } else {
-            let mut cstr_buffer = [0 as c_char; UUID_LENGTH as usize + 1];
+            let mut cstr_buffer = [0 as c_char; AMDSMI_GPU_UUID_SIZE as usize + 1];
             cstr_buffer[..uuid_length as usize]
                 .copy_from_slice(&uuid_buffer[..uuid_length as usize]);
             cstr_buffer[uuid_length as usize] = 0;
@@ -299,7 +279,7 @@ impl ProcessorHandle for AmdProcessorHandle {
         c_str
             .to_str()
             .map(|s| s.to_owned())
-            .map_err(|_| AmdError(result))
+            .map_err(|_| AmdError(result.into()))
     }
 
     /// Retrieves a [`amdsmi_engine_usage_t`] structure containing all data about GPU device activities.
@@ -475,8 +455,10 @@ impl ProcessorHandle for AmdProcessorHandle {
             )
         };
 
-        if result != SUCCESS && result != OUT_OF_RESSOURCES {
-            return Err(AmdError(result));
+        match AmdStatus::from(result) {
+            AmdStatus::Success => {}
+            AmdStatus::OutOfResources => {} // on continue, buffer trop petit
+            s => return Err(AmdError(s)),
         }
 
         if max_processes == 0 {
@@ -500,10 +482,10 @@ impl ProcessorHandle for AmdProcessorHandle {
                 )
             };
 
-            match result {
+            match AmdStatus::from(result) {
                 // SAFETY: According to AMD-SMI documentation, all elements up to `count` are written to the provided buffer.
                 // Allocated `max_processes` elements in `SUCCESS` status implies all elements are initialized.
-                SUCCESS => unsafe {
+                AmdStatus::Success => unsafe {
                     buffer.set_len(count as usize);
                     return Ok(buffer.into_iter().map(|x| x.assume_init()).collect());
                 },
@@ -511,11 +493,10 @@ impl ProcessorHandle for AmdProcessorHandle {
                 // According to AMD-SMI documentation: The buffer was filled up to its capacity.
                 // A counter is used to contain the actual total number of processes.
                 // If The buffer was too small, we retry with the new required size.
-                OUT_OF_RESSOURCES => {
+                AmdStatus::OutOfResources => {
                     max_processes = count;
                     continue;
                 }
-
                 err => return Err(AmdError(err)),
             }
         }
