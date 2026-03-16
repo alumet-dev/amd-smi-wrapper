@@ -10,15 +10,11 @@ use std::{
 };
 use thiserror::Error;
 
-pub mod utils;
+mod utils;
+mod bindings;
 
 use crate::bindings::*;
 use crate::utils::*;
-
-#[allow(warnings)]
-mod bindings {
-    include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
-}
 
 /// Error while using the AMD SMI library.
 #[derive(Error, Debug)]
