@@ -10,8 +10,8 @@ use std::{
 };
 use thiserror::Error;
 
-mod utils;
 mod bindings;
+mod utils;
 
 use crate::bindings::*;
 use crate::utils::*;
@@ -67,19 +67,14 @@ impl Drop for AmdSmi {
 
 /// Return a detailed description corresponding to the retrieved status code [`amdsmi_status_t`].
 fn message_status(amdsmi: &libamd_smi, status: amdsmi_status_t) -> Option<String> {
-    // SAFETY: The function guarantees a null-terminated string on success.
-    // We check that the returned pointer is non-null before creating a CStr.
-    unsafe {
-        let mut status_string: *const c_char = null();
-        let result = amdsmi.amdsmi_status_code_to_string(status, &mut status_string);
-        if result == AmdStatus::AMDSMI_STATUS_SUCCESS && !status_string.is_null() {
-            CStr::from_ptr(status_string)
-                .to_str()
-                .ok()
-                .map(str::to_string)
-        } else {
-            None
-        }
+    let mut status_string: *const c_char = null();
+    let result = unsafe { amdsmi.amdsmi_status_code_to_string(status, &mut status_string) };
+    if result == AmdStatus::AMDSMI_STATUS_SUCCESS && !status_string.is_null() {
+        // SAFETY: the string is null-terminated and the pointer is non-null
+        let status_string = unsafe { CStr::from_ptr(status_string) };
+        status_string.to_str().ok().map(str::to_string)
+    } else {
+        None
     }
 }
 
