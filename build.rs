@@ -12,6 +12,7 @@ fn main() {
         .header(HEADER)
         .parse_callbacks(Box::new(DocFix))
         .dynamic_library_name(LIB)
+        .newtype_enum("amdsmi_asic_info_t")
         .newtype_enum("amdsmi_status_t")
         .newtype_enum("amdsmi_memory_type_t")
         .newtype_enum("amdsmi_temperature_type_t")

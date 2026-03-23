@@ -1,17 +1,18 @@
 //! Handles used to manipulate the devices.
 
-use std::{ffi::c_char, mem::MaybeUninit, ptr, sync::Arc};
+use std::{
+    ffi::c_char,
+    mem::MaybeUninit,
+    ptr::{self, null_mut},
+    sync::Arc,
+};
 
 use crate::{
-    AmdSmi,
-    bindings::{
-        AMDSMI_GPU_UUID_SIZE, AMDSMI_MAX_FAN_SPEED, amdsmi_clk_info_t, amdsmi_engine_usage_t,
-        amdsmi_power_info_t, amdsmi_proc_info_t, amdsmi_processor_handle, amdsmi_socket_handle,
-        amdsmi_status_t,
-    },
-    error::AmdError,
-    metrics::*,
-    utils::c_buffer_to_string,
+    AmdInterface, AmdSmi, bindings::{
+        AMDSMI_GPU_UUID_SIZE, AMDSMI_MAX_FAN_SPEED, amdsmi_asic_info_t, amdsmi_clk_info_t,
+        amdsmi_engine_usage_t, amdsmi_power_info_t, amdsmi_proc_info_t, amdsmi_processor_handle,
+        amdsmi_socket_handle, amdsmi_status_t,
+    }, error::AmdError, metrics::*, utils::c_buffer_to_string
 };
 
 #[cfg(feature = "mock")]
@@ -25,6 +26,46 @@ pub struct AmdSocketHandle {
 pub struct AmdProcessorHandle {
     pub(crate) amdsmi: Arc<AmdSmi>,
     pub(crate) inner: amdsmi_processor_handle,
+}
+
+impl AmdInterface for Arc<AmdSmi> {
+    type SocketHandle = AmdSocketHandle;
+
+    fn socket_handles(&self) -> Result<Vec<Self::SocketHandle>, AmdError> {
+        let mut socket_count = 0;
+
+        // Query the number of available GPU socket handles.
+        // SAFETY: According to the AMD-SMI documentation, passing `null_mut()` is safe which sets `socket_count` to the number of sockets in the system.
+        let result = unsafe {
+            self.inner
+                .amdsmi
+                .amdsmi_get_socket_handles(&mut socket_count, null_mut())
+        };
+        self.inner.check_status(result)?;
+
+        // Allocate a vector of null pointers.
+        let mut socket_handles = vec![null_mut(); socket_count as usize];
+
+        // Fill the buffer with socket handles.
+        // SAFETY: `socket_handles.as_mut_ptr()` points to memory of sufficient size.
+        // According the AMD-SMI library documentation, the function writes at most `socket_count` handles, so no out-of-bounds write occurs.
+        let result = unsafe {
+            self.inner
+                .amdsmi
+                .amdsmi_get_socket_handles(&mut socket_count, socket_handles.as_mut_ptr())
+        };
+        self.inner.check_status(result)?;
+
+        socket_handles.truncate(socket_count as usize);
+
+        Ok(socket_handles
+            .into_iter()
+            .map(|s| AmdSocketHandle {
+                amdsmi: Arc::clone(self),
+                inner: s,
+            })
+            .collect())
+    }
 }
 
 /// Handle to a socket in the system.
@@ -46,13 +87,13 @@ impl SocketHandle for AmdSocketHandle {
         // Query the number of processor handles for the given socket.
         // SAFETY: According the AMD-SMI library documentation, passing `null_mut()` is safe which sets `processor_count` to the number of processors available for this socket.
         let result = unsafe {
-            self.amdsmi.amdsmi.amdsmi_get_processor_handles(
+            self.amdsmi.inner.amdsmi.amdsmi_get_processor_handles(
                 self.inner,
                 &mut processor_count,
                 ptr::null_mut(),
             )
         };
-        self.amdsmi.check_status(result)?;
+        self.amdsmi.inner.check_status(result)?;
 
         // Allocate a vector of nulls.
         let mut processor_handles = vec![ptr::null_mut(); processor_count as usize];
@@ -61,14 +102,14 @@ impl SocketHandle for AmdSocketHandle {
         // SAFETY: `processor_handles.as_mut_ptr()` points to a memory block of sufficient size.
         //  According the AMD-SMI library documentation, the function writes at most `processor_count` handles ensuring no out-of-bounds access occurs.
         let result = unsafe {
-            self.amdsmi.amdsmi.amdsmi_get_processor_handles(
+            self.amdsmi.inner.amdsmi.amdsmi_get_processor_handles(
                 self.inner,
                 &mut processor_count,
                 processor_handles.as_mut_ptr(),
             )
         };
 
-        self.amdsmi.check_status(result)?;
+        self.amdsmi.inner.check_status(result)?;
 
         processor_handles.truncate(processor_count as usize);
         Ok(processor_handles
@@ -86,6 +127,9 @@ impl SocketHandle for AmdSocketHandle {
 pub trait ProcessorHandle {
     /// Retrieves a [`AmdEngineUsage`] structure containing all data about GPU device activities.
     fn device_activity(&self) -> Result<AmdEngineUsage, AmdError>;
+
+    /// Retrieves globals [`AmdAsicInfo`] information about a GPU device.
+    fn device_asic_info(&self) -> Result<AmdAsicInfo, AmdError>;
 
     /// Retrieves a [`AmdClkInfo`] structure containing data about detected clock devices.
     ///
@@ -156,11 +200,33 @@ impl ProcessorHandle for AmdProcessorHandle {
         // The `SUCCESS` return code `amdsmi_status_t` is checked before using the data.
         let result = unsafe {
             self.amdsmi
+                .inner
                 .amdsmi
                 .amdsmi_get_gpu_activity(self.inner, info.as_mut_ptr())
         };
 
-        self.amdsmi.check_status(result)?;
+        self.amdsmi.inner.check_status(result)?;
+
+        // SAFETY: `assume_init()` is safe because the FFI call succeeded and fully initialized `info`.
+        let info = unsafe { info.assume_init() };
+        Ok(info.into())
+    }
+
+    fn device_asic_info(&self) -> Result<AmdAsicInfo, AmdError> {
+        // Allocate uninitialized memory for the structure and avoid reading uninitialized memory before the FFI call.
+        let mut info = MaybeUninit::<amdsmi_asic_info_t>::uninit();
+
+        // SAFETY: Pass a raw pointer to uninitialized memory to the FFI function.
+        // According to AMD-SMI documentation, the function fully initializes the structure on success.
+        // The `SUCCESS` return code `amdsmi_status_t` is checked before using the data.
+        let result = unsafe {
+            self.amdsmi
+                .inner
+                .amdsmi
+                .amdsmi_get_gpu_asic_info(self.inner, info.as_mut_ptr())
+        };
+
+        self.amdsmi.inner.check_status(result)?;
 
         // SAFETY: `assume_init()` is safe because the FFI call succeeded and fully initialized `info`.
         let info = unsafe { info.assume_init() };
@@ -175,11 +241,12 @@ impl ProcessorHandle for AmdProcessorHandle {
         // The `SUCCESS` return code `amdsmi_status_t` is checked before using the data.
         let result = unsafe {
             self.amdsmi
+                .inner
                 .amdsmi
                 .amdsmi_get_clock_info(self.inner, clk_type, info.as_mut_ptr())
         };
 
-        self.amdsmi.check_status(result)?;
+        self.amdsmi.inner.check_status(result)?;
 
         // SAFETY: `assume_init()` is safe because the FFI call succeeded and the structure was fully initialized by the library.
         let info = unsafe { info.assume_init() };
@@ -197,7 +264,7 @@ impl ProcessorHandle for AmdProcessorHandle {
         // According to AMD-SMI documentation, the function writes all values on success and will not write beyond the memory locations provided.
         // The `SUCCESS` return code `amdsmi_status_t` is checked before using the data.
         let result = unsafe {
-            self.amdsmi.amdsmi.amdsmi_get_energy_count(
+            self.amdsmi.inner.amdsmi.amdsmi_get_energy_count(
                 self.inner,
                 &mut consumption.energy,
                 &mut consumption.resolution,
@@ -205,7 +272,7 @@ impl ProcessorHandle for AmdProcessorHandle {
             )
         };
 
-        self.amdsmi.check_status(result)?;
+        self.amdsmi.inner.check_status(result)?;
         Ok(consumption)
     }
 
@@ -217,11 +284,12 @@ impl ProcessorHandle for AmdProcessorHandle {
         // The `SUCCESS` return code `amdsmi_status_t` is checked before using the data.
         let result = unsafe {
             self.amdsmi
+                .inner
                 .amdsmi
                 .amdsmi_get_gpu_fan_speed(self.inner, sensor_index, &mut speed)
         };
 
-        self.amdsmi.check_status(result)?;
+        self.amdsmi.inner.check_status(result)?;
         Ok((speed as u32 / AMDSMI_MAX_FAN_SPEED) * 100)
     }
 
@@ -233,11 +301,12 @@ impl ProcessorHandle for AmdProcessorHandle {
         // The `SUCCESS` return code `amdsmi_status_t` is checked before using the data.
         let result = unsafe {
             self.amdsmi
+                .inner
                 .amdsmi
                 .amdsmi_get_gpu_memory_usage(self.inner, mem_type, &mut used)
         };
 
-        self.amdsmi.check_status(result)?;
+        self.amdsmi.inner.check_status(result)?;
         Ok(used)
     }
 
@@ -252,7 +321,7 @@ impl ProcessorHandle for AmdProcessorHandle {
         // According to AMD-SMI documentation, the function writes all values on success or ignored them.
         // The `SUCCESS` return code `amdsmi_status_t` is checked before using the data.
         let result = unsafe {
-            self.amdsmi.amdsmi.amdsmi_get_gpu_pci_throughput(
+            self.amdsmi.inner.amdsmi.amdsmi_get_gpu_pci_throughput(
                 self.inner,
                 &mut usage.sent,
                 &mut usage.received,
@@ -260,7 +329,7 @@ impl ProcessorHandle for AmdProcessorHandle {
             )
         };
 
-        self.amdsmi.check_status(result)?;
+        self.amdsmi.inner.check_status(result)?;
         Ok(usage)
     }
 
@@ -275,11 +344,12 @@ impl ProcessorHandle for AmdProcessorHandle {
         // The `SUCCESS` return code `amdsmi_status_t` is checked before using the data.
         let result = unsafe {
             self.amdsmi
+                .inner
                 .amdsmi
                 .amdsmi_get_power_info(self.inner, info.as_mut_ptr())
         };
 
-        self.amdsmi.check_status(result)?;
+        self.amdsmi.inner.check_status(result)?;
 
         // SAFETY: `assume_init()` is safe because the FFI call returned SUCCESS, meaning `info` is fully initialized.
         let info = unsafe { info.assume_init() };
@@ -294,11 +364,12 @@ impl ProcessorHandle for AmdProcessorHandle {
         // The `SUCCESS` return code `amdsmi_status_t` is checked before using the data.
         let result = unsafe {
             self.amdsmi
+                .inner
                 .amdsmi
                 .amdsmi_is_gpu_power_management_enabled(self.inner, &mut enabled)
         };
 
-        self.amdsmi.check_status(result)?;
+        self.amdsmi.inner.check_status(result)?;
         Ok(enabled)
     }
 
@@ -313,7 +384,7 @@ impl ProcessorHandle for AmdProcessorHandle {
         // According to AMD-SMI documentation, the function writes the value to this pointer.
         // The `SUCCESS` return code `amdsmi_status_t` is checked before using the data.
         let result = unsafe {
-            self.amdsmi.amdsmi.amdsmi_get_temp_metric(
+            self.amdsmi.inner.amdsmi.amdsmi_get_temp_metric(
                 self.inner,
                 sensor_type,
                 metric,
@@ -321,7 +392,7 @@ impl ProcessorHandle for AmdProcessorHandle {
             )
         };
 
-        self.amdsmi.check_status(result)?;
+        self.amdsmi.inner.check_status(result)?;
         Ok(temperature)
     }
 
@@ -337,7 +408,7 @@ impl ProcessorHandle for AmdProcessorHandle {
         // The value is only read after confirming that the return status is SUCCESS.
         // The `SUCCESS` return code `amdsmi_status_t` is checked before using the data.
         let result = unsafe {
-            self.amdsmi.amdsmi.amdsmi_get_gpu_volt_metric(
+            self.amdsmi.inner.amdsmi.amdsmi_get_gpu_volt_metric(
                 self.inner,
                 sensor_type,
                 metric,
@@ -345,7 +416,7 @@ impl ProcessorHandle for AmdProcessorHandle {
             )
         };
 
-        self.amdsmi.check_status(result)?;
+        self.amdsmi.inner.check_status(result)?;
         Ok(voltage)
     }
 
@@ -356,7 +427,7 @@ impl ProcessorHandle for AmdProcessorHandle {
         // Passing `null_mut()` as the buffer tells the FFI to only write the count to `max_processes`.
         // According to AMD-SMI documentation, `max_processes` will be updated with the actual number of processes.
         let result = unsafe {
-            self.amdsmi.amdsmi.amdsmi_get_gpu_process_list(
+            self.amdsmi.inner.amdsmi.amdsmi_get_gpu_process_list(
                 self.inner,
                 &mut max_processes,
                 ptr::null_mut(),
@@ -388,7 +459,7 @@ impl ProcessorHandle for AmdProcessorHandle {
             // According the AMD-SMI library documentation, all elements up to `count` are written in case of `SUCCESS` or `OUT_OF_RESOURCES`.
             // There is no uninitialized memory read before the function writes to it.
             let result = unsafe {
-                self.amdsmi.amdsmi.amdsmi_get_gpu_process_list(
+                self.amdsmi.inner.amdsmi.amdsmi_get_gpu_process_list(
                     self.inner,
                     &mut count,
                     buffer.as_mut_ptr() as *mut amdsmi_proc_info_t,
@@ -431,14 +502,14 @@ impl ProcessorHandle for AmdProcessorHandle {
         // SAFETY: According to AMD-SMI documentation, the function will not write beyond `uuid_length`.
         // `uuid_length` must be initialized to the buffer size, and the function will update it with the actual length.
         let result = unsafe {
-            self.amdsmi.amdsmi.amdsmi_get_gpu_device_uuid(
+            self.amdsmi.inner.amdsmi.amdsmi_get_gpu_device_uuid(
                 self.inner,
                 &mut uuid_length,
                 uuid_buffer.as_mut_ptr(),
             )
         };
 
-        self.amdsmi.check_status(result)?;
+        self.amdsmi.inner.check_status(result)?;
 
         let uuid = c_buffer_to_string(uuid_buffer.as_slice());
         Ok(uuid)
