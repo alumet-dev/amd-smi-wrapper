@@ -2,8 +2,8 @@
 
 use crate::{
     bindings::{
-        amdsmi_clk_info_t, amdsmi_engine_usage_t, amdsmi_power_info_t, amdsmi_proc_info_t,
-        amdsmi_proc_info_t_engine_usage_, amdsmi_proc_info_t_memory_usage_,
+        amdsmi_asic_info_t, amdsmi_clk_info_t, amdsmi_engine_usage_t, amdsmi_power_info_t,
+        amdsmi_proc_info_t, amdsmi_proc_info_t_engine_usage_, amdsmi_proc_info_t_memory_usage_,
     },
     utils::c_buffer_to_string,
 };
@@ -14,6 +14,50 @@ pub type AmdTemperatureMetric = crate::bindings::amdsmi_temperature_metric_t;
 pub type AmdTemperatureType = crate::bindings::amdsmi_temperature_type_t;
 pub type AmdVoltageMetric = crate::bindings::amdsmi_voltage_metric_t;
 pub type AmdVoltageType = crate::bindings::amdsmi_voltage_type_t;
+
+/// Parameters about [`amdsmi_asic_info_t`].
+#[derive(Debug, Default, Clone)]
+pub struct AmdAsicInfo {
+    /// Model name of a GPU.
+    pub market_name: String,
+    /// GPU identification given by vendor.
+    pub vendor_id: u32,
+    /// Complete commercial name of a GPU.
+    pub vendor_name: String,
+    pub subvendor_id: u32,
+    /// Software ID of a GPU.
+    pub device_id: u64,
+    /// Revision ID of a GPU.
+    pub rev_id: u32,
+    /// GPU chip serial number.
+    pub asic_serial: String,
+    /// Open Application Model identification.
+    pub oam_id: u32,
+    /// Total number of compute unit on a GPU.
+    pub num_of_compute_units: u32,
+    /// Graphic core version of a GPU.
+    pub target_graphics_version: u64,
+    /// GPU identification given by subsystem.
+    pub subsystem_id: u32,
+}
+
+impl From<amdsmi_asic_info_t> for AmdAsicInfo {
+    fn from(value: amdsmi_asic_info_t) -> Self {
+        Self {
+            market_name: c_buffer_to_string(&value.market_name),
+            vendor_id: value.vendor_id,
+            vendor_name: c_buffer_to_string(&value.vendor_name),
+            subvendor_id: value.subvendor_id,
+            device_id: value.device_id,
+            rev_id: value.rev_id,
+            asic_serial: c_buffer_to_string(&value.asic_serial),
+            oam_id: value.oam_id,
+            num_of_compute_units: value.num_of_compute_units,
+            target_graphics_version: value.target_graphics_version,
+            subsystem_id: value.subsystem_id,
+        }
+    }
+}
 
 /// Parameters about [`amdsmi_clk_info_t`].
 #[derive(Debug, Default, Clone)]
