@@ -3,15 +3,17 @@
 🚧 **WARNING**: This wrapper is work in progress, use at your own risk.
 
 - **Header**: `ROCm 7.2.0`
-- **Crate**: `0.2.1`
+- **Crate**: `0.4.0`
 
 Currently includes and implements the following elements:
 
 |Resource|Description|
 |--------|-----------|
-|`amdsmi_status_t`|Return errors and status codes for a given AMD-SMI command|
+|`amdsmi_asic_info_t`|Available AMD hardware device information|
 |`amdsmi_clk_type_t`|Existing clock devices on a AMD hardware|
+|`amdsmi_init_flags_t`|Byte flag defining which AMD hardware to start the library on|
 |`amdsmi_memory_type_t`|Existing memory devices on a AMD hardware|
+|`amdsmi_status_t`|Return errors and status codes for a given AMD-SMI command|
 |`amdsmi_temperature_type_t`|Existing thermal sensors on an AMD hardware|
 |`amdsmi_temperature_metric_t`|Thermal monitoring type for a given sensor|
 |`amdsmi_voltage_type_t`|Existing voltage probes on an AMD hardware|
@@ -22,6 +24,7 @@ Currently includes and implements the following elements:
 |`amdsmi_get_clock_info`|Clock frequency of a give GPU|
 |`amdsmi_get_energy_count`|Energy consumption of a given GPU|
 |`amdsmi_get_gpu_activity`|Activity of engine unit of a given GPU|
+|`amdsmi_get_gpu_asic_info`|Various global information on GPU chips|
 |`amdsmi_get_gpu_device_uuid`|Hardware ID of a given GPU|
 |`amdsmi_get_gpu_fan_speed`|Fan speed of a given GPU|
 |`amdsmi_get_gpu_memory_usage`|Memory consumption of a given GPU|
