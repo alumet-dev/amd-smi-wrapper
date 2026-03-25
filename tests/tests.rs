@@ -25,15 +25,6 @@ fn list_devices() {
             println!("found gpu: {uuid}");
         }
     }
+
     // automatic drop of amdsmi
-}
-
-#[test]
-fn explicit_stop() {
-    if skip_gpu_tests() {
-        return;
-    }
-
-    let amdsmi = AmdSmi::init(AmdInitFlags::AMDSMI_INIT_AMD_GPUS).unwrap();
-    amdsmi.stop().expect("error in stop");
 }

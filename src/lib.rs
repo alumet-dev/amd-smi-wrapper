@@ -1,7 +1,4 @@
-use std::{ptr, sync::Arc};
-
-#[cfg(feature = "mock")]
-use mockall::automock;
+use std::{ptr::null_mut, sync::Arc};
 
 mod bindings;
 pub mod error;
@@ -9,14 +6,24 @@ pub mod handles;
 pub mod metrics;
 mod utils;
 
-use crate::handles::AmdSocketHandle;
-use error::{AmdError, AmdInitError};
+use crate::{
+    bindings::{amdsmi_init_flags_t, amdsmi_status_t, libamd_smi},
+    error::{AmdError, AmdInitError, AmdStatus, status_message},
+    handles::{AmdSocketHandle, SocketHandle},
+};
+
+#[cfg(feature = "mock")]
+use mockall::automock;
 
 pub(crate) const LIB_PATH: &str = "libamd_smi.so";
 
 /// Initialization flags for the library.
 /// See [`AmdSmi::init`].
-pub type AmdInitFlags = crate::bindings::amdsmi_init_flags_t;
+pub type AmdInitFlags = amdsmi_init_flags_t;
+
+struct LibAmdSmi {
+    amdsmi: libamd_smi,
+}
 
 /// Main wrapper around the AMD SMI library.
 ///
@@ -24,11 +31,12 @@ pub type AmdInitFlags = crate::bindings::amdsmi_init_flags_t;
 /// The library is automatically shut down when `AmdSmi` is dropped.
 /// The `Drop` implementation of `AmdSmi` ignores shutdown errors.
 /// To handle the error, call [`AmdInterface::stop`].
+#[derive(Clone)]
 pub struct AmdSmi {
-    amdsmi: bindings::libamd_smi,
+    amdsmi: Arc<LibAmdSmi>,
 }
 
-impl Drop for AmdSmi {
+impl Drop for LibAmdSmi {
     fn drop(&mut self) {
         // Shut down the AMD-SMI library and release all internal resources.
         // SAFETY: The function expects a valid, initialized library instance.
@@ -38,13 +46,13 @@ impl Drop for AmdSmi {
 }
 
 impl AmdSmi {
-    /// Checks the value of [`amdsmi_status_t`] to return `Ok` or `Err`.
-    fn check_status(&self, status: bindings::amdsmi_status_t) -> Result<(), AmdError> {
+    /// Checking the value of [`amdsmi_status_t`] to return an error or success.
+    fn check_status(&self, status: amdsmi_status_t) -> Result<(), AmdError> {
         match status {
-            bindings::amdsmi_status_t::AMDSMI_STATUS_SUCCESS => Ok(()),
+            AmdStatus::AMDSMI_STATUS_SUCCESS => Ok(()),
             status => Err(AmdError {
                 status,
-                message: error::message_for_status(&self.amdsmi, status),
+                message: status_message(&self.amdsmi.amdsmi, status),
             }),
         }
     }
@@ -57,16 +65,18 @@ impl AmdSmi {
     ///
     /// let amdsmi = AmdSmi::init(AmdInitFlags::AMDSMI_INIT_AMD_GPUS).expect("init failed");
     /// ```
-    pub fn init(flags: AmdInitFlags) -> Result<Arc<Self>, AmdInitError> {
+    pub fn init(flags: AmdInitFlags) -> Result<Self, AmdInitError> {
         // SAFETY: The library must exist at the specified path, otherwise `libamd_smi::new` returns an error.
         // This operation involves raw FFI interaction and assumes the dynamic loader succeeds.
-        let amdsmi = unsafe { bindings::libamd_smi::new(LIB_PATH)? };
-        let instance = Arc::new(AmdSmi { amdsmi });
+        let amdsmi = unsafe { libamd_smi::new(LIB_PATH)? };
+        let instance = AmdSmi {
+            amdsmi: Arc::new(LibAmdSmi { amdsmi }),
+        };
 
         // SAFETY: The function expects a valid library instance and valid flags.
         // According to the AMD-SMI documentation, the function fully initializes internal structures for GPU discovery.
         // The return code `amdsmi_status_t` is checked to ensure initialization succeeded before using the library.
-        let status = unsafe { instance.amdsmi.amdsmi_init(flags.0.into()) };
+        let status = unsafe { instance.amdsmi.amdsmi.amdsmi_init(flags.0.into()) };
         instance.check_status(status)?;
 
         Ok(instance)
@@ -80,10 +90,7 @@ impl AmdSmi {
 #[cfg_attr(feature = "mock", automock(type SocketHandle=handles::MockSocketHandle;))]
 pub trait AmdInterface {
     /// Type of socket handle managed by this interface.
-    type SocketHandle: handles::SocketHandle;
-
-    /// Stops the AMD SMI library.
-    fn stop(self) -> Result<(), AmdError>;
+    type SocketHandle: SocketHandle;
 
     /// Lists the available sockets.
     ///
@@ -93,16 +100,8 @@ pub trait AmdInterface {
     fn socket_handles(&self) -> Result<Vec<Self::SocketHandle>, AmdError>;
 }
 
-impl AmdInterface for Arc<AmdSmi> {
+impl AmdInterface for AmdSmi {
     type SocketHandle = AmdSocketHandle;
-
-    fn stop(self) -> Result<(), AmdError> {
-        // Shut down the AMD-SMI library and release all internal resources.
-        // SAFETY: The function expects a valid, initialized library instance.
-        // The Arc ensures that shutdown is only called once when the last reference is dropped.
-        let result = unsafe { self.amdsmi.amdsmi_shut_down() };
-        self.check_status(result)
-    }
 
     fn socket_handles(&self) -> Result<Vec<Self::SocketHandle>, AmdError> {
         let mut socket_count = 0;
@@ -111,18 +110,20 @@ impl AmdInterface for Arc<AmdSmi> {
         // SAFETY: According to the AMD-SMI documentation, passing `null_mut()` is safe which sets `socket_count` to the number of sockets in the system.
         let result = unsafe {
             self.amdsmi
-                .amdsmi_get_socket_handles(&mut socket_count, ptr::null_mut())
+                .amdsmi
+                .amdsmi_get_socket_handles(&mut socket_count, null_mut())
         };
         self.check_status(result)?;
 
         // Allocate a vector of null pointers.
-        let mut socket_handles = vec![ptr::null_mut(); socket_count as usize];
+        let mut socket_handles = vec![null_mut(); socket_count as usize];
 
         // Fill the buffer with socket handles.
         // SAFETY: `socket_handles.as_mut_ptr()` points to memory of sufficient size.
         // According the AMD-SMI library documentation, the function writes at most `socket_count` handles, so no out-of-bounds write occurs.
         let result = unsafe {
             self.amdsmi
+                .amdsmi
                 .amdsmi_get_socket_handles(&mut socket_count, socket_handles.as_mut_ptr())
         };
         self.check_status(result)?;
@@ -132,7 +133,7 @@ impl AmdInterface for Arc<AmdSmi> {
         Ok(socket_handles
             .into_iter()
             .map(|s| AmdSocketHandle {
-                amdsmi: Arc::clone(self),
+                amdsmi: self.clone(),
                 inner: s,
             })
             .collect())

@@ -39,7 +39,7 @@ pub enum AmdInitError {
 }
 
 /// Returns a detailed description of a status code.
-pub fn message_for_status(amdsmi: &libamd_smi, status: amdsmi_status_t) -> Option<String> {
+pub fn status_message(amdsmi: &libamd_smi, status: amdsmi_status_t) -> Option<String> {
     let mut status_string: *const c_char = ptr::null();
     let result = unsafe { amdsmi.amdsmi_status_code_to_string(status, &mut status_string) };
     if result == amdsmi_status_t::AMDSMI_STATUS_SUCCESS && !status_string.is_null() {
