@@ -1,19 +1,20 @@
 use std::{ptr::null_mut, sync::Arc};
 
-mod bindings;
+#[cfg(feature = "mock")]
+use mockall::automock;
+
 pub mod error;
 pub mod handles;
 pub mod metrics;
 mod utils;
+
+use amd_smi_wrapper_sys as bindings;
 
 use crate::{
     bindings::{amdsmi_init_flags_t, amdsmi_status_t, libamd_smi},
     error::{AmdError, AmdInitError, AmdStatus, status_message},
     handles::{AmdSocketHandle, SocketHandle},
 };
-
-#[cfg(feature = "mock")]
-use mockall::automock;
 
 pub(crate) const LIB_PATH: &str = "libamd_smi.so";
 
