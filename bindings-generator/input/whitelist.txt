@@ -1,0 +1,41 @@
+# constants
+AMDSMI_LIB_VERSION_MAJOR
+AMDSMI_LIB_VERSION_MINOR
+AMDSMI_LIB_VERSION_RELEASE
+
+AMDSMI_GPU_UUID_SIZE
+AMDSMI_MAX_FAN_SPEED
+
+# structs and other types
+amdsmi_asic_info_t
+amdsmi_clk_info_t
+amdsmi_engine_usage_t
+amdsmi_get_processor_handles
+amdsmi_get_socket_handles
+amdsmi_init_flags_t
+amdsmi_power_info_t
+amdsmi_proc_info_t
+amdsmi_proc_info_t_engine_usage_
+amdsmi_proc_info_t_memory_usage_
+amdsmi_processor_handle
+amdsmi_socket_handle
+amdsmi_status_t
+
+# functions
+amdsmi_init
+amdsmi_shut_down
+
+amdsmi_get_clock_info
+amdsmi_get_energy_count
+amdsmi_get_gpu_activity
+amdsmi_get_gpu_asic_info
+amdsmi_get_gpu_device_uuid
+amdsmi_get_gpu_fan_speed
+amdsmi_get_gpu_memory_usage
+amdsmi_get_gpu_pci_throughput
+amdsmi_get_gpu_process_list
+amdsmi_get_gpu_volt_metric
+amdsmi_get_power_info
+amdsmi_get_temp_metric
+amdsmi_is_gpu_power_management_enabled
+amdsmi_status_code_to_string

@@ -1,4 +1,5 @@
 //! Low-level bindings to amdsmi.
-#![allow(warnings)]
 
-include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
+pub mod versions;
+
+pub use versions::latest::*;
