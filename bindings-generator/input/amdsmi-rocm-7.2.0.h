@@ -7485,3 +7485,4 @@ amdsmi_status_t amdsmi_get_cpu_socket_count(uint32_t *sock_count);
 #endif  // __cplusplus
 
 #endif  // __AMDSMI_H__
+

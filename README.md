@@ -1,39 +1,25 @@
-# Rust wrapper for AMD SMI library
+# Rust wrapper for the AMD SMI library
 
-🚧 **WARNING**: This wrapper is work in progress, use at your own risk.
+🚧 **WARNING**: This is a work in progress, use at your own risk.
 
-- **Header**: `ROCm 7.2.0`
-- **Crate**: `0.4.0`
+## Crates
 
-Currently includes and implements the following elements:
+This repository contains 3 crates:
+- `amd-smi-wrapper`: this is the main library crate, use it in your programs
+- `amd-smi-wrapper-sys`: basic bindings to the C library
+- `bindings-generator`: executable tool to help us generate the bindings
 
-|Resource|Description|
-|--------|-----------|
-|`amdsmi_asic_info_t`|Available AMD hardware device information|
-|`amdsmi_clk_type_t`|Existing clock devices on a AMD hardware|
-|`amdsmi_init_flags_t`|Byte flag defining which AMD hardware to start the library on|
-|`amdsmi_memory_type_t`|Existing memory devices on a AMD hardware|
-|`amdsmi_status_t`|Return errors and status codes for a given AMD-SMI command|
-|`amdsmi_temperature_type_t`|Existing thermal sensors on an AMD hardware|
-|`amdsmi_temperature_metric_t`|Thermal monitoring type for a given sensor|
-|`amdsmi_voltage_type_t`|Existing voltage probes on an AMD hardware|
-|`amdsmi_voltage_metric_t`|Voltage monitoring type for a given probe|
+### Regenerate the Bindings
 
-|Features|Description|
-|--------|-----------|
-|`amdsmi_get_clock_info`|Clock frequency of a give GPU|
-|`amdsmi_get_energy_count`|Energy consumption of a given GPU|
-|`amdsmi_get_gpu_activity`|Activity of engine unit of a given GPU|
-|`amdsmi_get_gpu_asic_info`|Various global information on GPU chips|
-|`amdsmi_get_gpu_device_uuid`|Hardware ID of a given GPU|
-|`amdsmi_get_gpu_fan_speed`|Fan speed of a given GPU|
-|`amdsmi_get_gpu_memory_usage`|Memory consumption of a given GPU|
-|`amdsmi_get_gpu_pci_throughput`|PCI bus traffic by a given GPU|
-|`amdsmi_get_gpu_process_list`|GPU metrics usage by running processes|
-|`amdsmi_get_gpu_volt_metric`|Voltage of a given GPU|
-|`amdsmi_get_power_info`|Power consumption of a given GPU|
-|`amdsmi_get_temp_metric`|Temperature emitted by given GPU areas|
-|`amdsmi_is_gpu_power_management_enabled`|Status required to retrieve the power consumption for a given GPU|
+To regen the bindings, use the bindings generator:
+
+```sh
+cargo run -p bindings-generator -- --input-header bindings-generator/input/amdsmi-rocm-7.2.0.h
+```
+
+This updates `amd-smi-wrapper-sys/src/versions/latest.rs`.
+
+Only the symbols declared in the [whitelist](bindings-generator/input/whitelist.txt) are generated.
 
 ## License
 
