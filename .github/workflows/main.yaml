@@ -6,7 +6,7 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  linter:
+  lint:
     runs-on: ubuntu-latest
 
     steps:
@@ -30,8 +30,11 @@ jobs:
           *.md
           **/*.md
 
-  builder:
+  build_and_test:
     runs-on: ubuntu-latest
+    env:
+      NO_GPU: true
+      DEBIAN_FRONTEND: noninteractive
 
     steps:
     - uses: actions/checkout@v5
@@ -44,30 +47,13 @@ jobs:
     - name: Run Clippy linter
       run: cargo clippy --no-deps
 
-    - name: Install dependencies to cross-compile the wrapper
+    - name: Install dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y clang libclang-dev gcc-aarch64-linux-gnu
-        rustup target add x86_64-unknown-linux-gnu aarch64-unknown-linux-gnu
+        sudo apt-get install -y clang libclang-dev
 
-    - name: Build for x86_64 architecture
-      run: cargo build --target=x86_64-unknown-linux-gnu
+    - name: Build
+      run: cargo build
 
-    - name: Cross build for arm64 architecture
-      run: cargo build --target=aarch64-unknown-linux-gnu
-
-  tester:
-    runs-on: ubuntu-latest
-
-    steps:
-    - uses: actions/checkout@v5
-      with:
-        fetch-depth: 1
-
-    - name: Compile Tests
-      run: cargo test --all-features --no-run
-
-    - name: Run Tests (including doc tests)
-      run: cargo test --all-features -- --nocapture
-      env:
-        NO_GPU: 'true'
+    - name: Test
+      run: cargo test --all-features
