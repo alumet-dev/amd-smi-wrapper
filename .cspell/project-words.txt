@@ -1,3 +1,4 @@
 amdsmi
 asic
 Navi
+regen
