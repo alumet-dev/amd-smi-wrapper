@@ -1,3 +1,4 @@
+#![deny(unsafe_op_in_unsafe_fn)]
 use std::{ptr::null_mut, sync::Arc};
 
 #[cfg(feature = "mock")]
@@ -8,11 +9,10 @@ pub mod handles;
 pub mod metrics;
 mod utils;
 
-use amd_smi_wrapper_sys as bindings;
+use amd_smi_wrapper_sys::{load::MultiVersionLib, versions::stable};
 
 use crate::{
-    bindings::{amdsmi_init_flags_t, amdsmi_status_t, libamd_smi},
-    error::{AmdError, AmdInitError, AmdStatus, status_message},
+    error::{AmdError, AmdInitError, status_message},
     handles::{AmdSocketHandle, SocketHandle},
 };
 
@@ -20,10 +20,10 @@ pub(crate) const LIB_PATH: &str = "libamd_smi.so";
 
 /// Initialization flags for the library.
 /// See [`AmdSmi::init`].
-pub type AmdInitFlags = amdsmi_init_flags_t;
+pub type AmdInitFlags = stable::amdsmi_init_flags_t;
 
 struct LibAmdSmi {
-    amdsmi: libamd_smi,
+    inner: MultiVersionLib,
 }
 
 /// Main wrapper around the AMD SMI library.
@@ -34,7 +34,7 @@ struct LibAmdSmi {
 /// To handle the error, call [`AmdInterface::stop`].
 #[derive(Clone)]
 pub struct AmdSmi {
-    amdsmi: Arc<LibAmdSmi>,
+    shared: Arc<LibAmdSmi>,
 }
 
 impl Drop for LibAmdSmi {
@@ -42,19 +42,24 @@ impl Drop for LibAmdSmi {
         // Shut down the AMD-SMI library and release all internal resources.
         // SAFETY: The function expects a valid, initialized library instance.
         // The shutdown is called only once when the last reference is dropped.
-        unsafe { self.amdsmi.amdsmi_shut_down() };
+        unsafe { self.inner.lib_stable.amdsmi_shut_down() };
     }
 }
 
 impl AmdSmi {
     /// Checking the value of [`amdsmi_status_t`] to return an error or success.
-    fn check_status(&self, status: amdsmi_status_t) -> Result<(), AmdError> {
+    fn check_status(&self, status: stable::amdsmi_status_t) -> Result<(), AmdError> {
         match status {
-            AmdStatus::AMDSMI_STATUS_SUCCESS => Ok(()),
-            status => Err(AmdError {
-                status,
-                message: status_message(&self.amdsmi.amdsmi, status),
-            }),
+            stable::AMDSMI_STATUS_SUCCESS => Ok(()),
+            other => Err(self.build_error(other)),
+        }
+    }
+
+    fn build_error(&self, status: stable::amdsmi_status_t) -> AmdError {
+        assert_ne!(status, stable::AMDSMI_STATUS_SUCCESS);
+        AmdError {
+            status,
+            message: status_message(&self.shared.inner.lib_stable, status),
         }
     }
 
@@ -67,17 +72,15 @@ impl AmdSmi {
     /// let amdsmi = AmdSmi::init(AmdInitFlags::AMDSMI_INIT_AMD_GPUS).expect("init failed");
     /// ```
     pub fn init(flags: AmdInitFlags) -> Result<Self, AmdInitError> {
-        // SAFETY: The library must exist at the specified path, otherwise `libamd_smi::new` returns an error.
-        // This operation involves raw FFI interaction and assumes the dynamic loader succeeds.
-        let amdsmi = unsafe { libamd_smi::new(LIB_PATH)? };
+        let amdsmi = amd_smi_wrapper_sys::load(LIB_PATH, true)?;
         let instance = AmdSmi {
-            amdsmi: Arc::new(LibAmdSmi { amdsmi }),
+            shared: Arc::new(LibAmdSmi { inner: amdsmi }),
         };
 
         // SAFETY: The function expects a valid library instance and valid flags.
         // According to the AMD-SMI documentation, the function fully initializes internal structures for GPU discovery.
         // The return code `amdsmi_status_t` is checked to ensure initialization succeeded before using the library.
-        let status = unsafe { instance.amdsmi.amdsmi.amdsmi_init(flags.0.into()) };
+        let status = unsafe { instance.shared.inner.lib_stable.amdsmi_init(flags.0.into()) };
         instance.check_status(status)?;
 
         Ok(instance)
@@ -110,8 +113,9 @@ impl AmdInterface for AmdSmi {
         // Query the number of available GPU socket handles.
         // SAFETY: According to the AMD-SMI documentation, passing `null_mut()` is safe which sets `socket_count` to the number of sockets in the system.
         let result = unsafe {
-            self.amdsmi
-                .amdsmi
+            self.shared
+                .inner
+                .lib_stable
                 .amdsmi_get_socket_handles(&mut socket_count, null_mut())
         };
         self.check_status(result)?;
@@ -123,8 +127,9 @@ impl AmdInterface for AmdSmi {
         // SAFETY: `socket_handles.as_mut_ptr()` points to memory of sufficient size.
         // According the AMD-SMI library documentation, the function writes at most `socket_count` handles, so no out-of-bounds write occurs.
         let result = unsafe {
-            self.amdsmi
-                .amdsmi
+            self.shared
+                .inner
+                .lib_stable
                 .amdsmi_get_socket_handles(&mut socket_count, socket_handles.as_mut_ptr())
         };
         self.check_status(result)?;

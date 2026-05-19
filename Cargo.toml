@@ -1,3 +1,4 @@
 [workspace]
 resolver = "3"
 members = ["amd-smi-wrapper", "amd-smi-wrapper-sys", "bindings-generator"]
+edition = "2024"

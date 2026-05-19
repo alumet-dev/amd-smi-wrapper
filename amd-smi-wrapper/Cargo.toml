@@ -11,3 +11,4 @@ libloading = "0.8"
 thiserror = "2.0.14"
 mockall = { version = "0.14.0", optional = true }
 amd-smi-wrapper-sys = { path = "../amd-smi-wrapper-sys" }
+log = "0.4.29"
