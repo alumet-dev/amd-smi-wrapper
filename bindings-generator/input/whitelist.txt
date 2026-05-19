@@ -1,4 +1,5 @@
 # constants
+AMDSMI_LIB_VERSION_YEAR
 AMDSMI_LIB_VERSION_MAJOR
 AMDSMI_LIB_VERSION_MINOR
 AMDSMI_LIB_VERSION_RELEASE
@@ -20,10 +21,12 @@ amdsmi_proc_info_t_memory_usage_
 amdsmi_processor_handle
 amdsmi_socket_handle
 amdsmi_status_t
+amdsmi_version_t
 
 # functions
 amdsmi_init
 amdsmi_shut_down
+amdsmi_get_lib_version
 
 amdsmi_get_clock_info
 amdsmi_get_energy_count

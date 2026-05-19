@@ -9,17 +9,9 @@ This repository contains 3 crates:
 - `amd-smi-wrapper-sys`: basic bindings to the C library
 - `bindings-generator`: executable tool to help us generate the bindings
 
-### Regenerate the Bindings
+### How to Update the Bindings
 
-To regen the bindings, use the bindings generator:
-
-```sh
-cargo run -p bindings-generator -- --input-header bindings-generator/input/amdsmi-rocm-7.2.0.h
-```
-
-This updates `amd-smi-wrapper-sys/src/versions/latest.rs`.
-
-Only the symbols declared in the [whitelist](bindings-generator/input/whitelist.txt) are generated.
+To regenerate the bindings, [use the bindings generator](bindings-generator/README.md).
 
 ## License
 
