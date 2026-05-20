@@ -12,7 +12,7 @@ mod utils;
 use amd_smi_wrapper_sys::{load::MultiVersionLib, versions::stable};
 
 use crate::{
-    error::{AmdError, AmdInitError, status_message},
+    error::{AmdError, AmdInitError, status_message, SimplifiedStatus},
     handles::{AmdSocketHandle, SocketHandle},
 };
 
@@ -58,7 +58,8 @@ impl AmdSmi {
     fn build_error(&self, status: stable::amdsmi_status_t) -> AmdError {
         assert_ne!(status, stable::AMDSMI_STATUS_SUCCESS);
         AmdError {
-            status,
+            status: SimplifiedStatus::try_from(status).ok(),
+            status_code: status,
             message: status_message(&self.shared.inner.lib_stable, status),
         }
     }
@@ -125,7 +126,7 @@ impl AmdInterface for AmdSmi {
 
         // Fill the buffer with socket handles.
         // SAFETY: `socket_handles.as_mut_ptr()` points to memory of sufficient size.
-        // According the AMD-SMI library documentation, the function writes at most `socket_count` handles, so no out-of-bounds write occurs.
+        // According to the AMD-SMI library documentation, the function writes at most `socket_count` handles, so no out-of-bounds write occurs.
         let result = unsafe {
             self.shared
                 .inner

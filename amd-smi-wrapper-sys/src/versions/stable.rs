@@ -21,8 +21,25 @@ pub type amdsmi_power_info_t = OpaqueStruct;
 #[repr(transparent)]
 pub struct amdsmi_status_t(pub ::std::os::raw::c_uint);
 
+// below are some stable status codes that we need
 pub const AMDSMI_STATUS_SUCCESS: amdsmi_status_t = amdsmi_status_t(0);
+pub const AMDSMI_STATUS_INVAL: amdsmi_status_t = amdsmi_status_t(1);
+pub const AMDSMI_STATUS_NOT_SUPPORTED: amdsmi_status_t = amdsmi_status_t(2);
+pub const AMDSMI_STATUS_NOT_YET_IMPLEMENTED: amdsmi_status_t = amdsmi_status_t(3);
+pub const AMDSMI_STATUS_FAIL_LOAD_MODULE: amdsmi_status_t = amdsmi_status_t(4);
+pub const AMDSMI_STATUS_FAIL_LOAD_SYMBOL: amdsmi_status_t = amdsmi_status_t(5);
+pub const AMDSMI_STATUS_DRM_ERROR: amdsmi_status_t = amdsmi_status_t(6);
+pub const AMDSMI_STATUS_API_FAILED: amdsmi_status_t = amdsmi_status_t(7);
+pub const AMDSMI_STATUS_TIMEOUT: amdsmi_status_t = amdsmi_status_t(8);
+pub const AMDSMI_STATUS_RETRY: amdsmi_status_t = amdsmi_status_t(9);
+pub const AMDSMI_STATUS_NO_PERM: amdsmi_status_t = amdsmi_status_t(10);
+pub const AMDSMI_STATUS_INTERRUPT: amdsmi_status_t = amdsmi_status_t(11);
+pub const AMDSMI_STATUS_IO: amdsmi_status_t = amdsmi_status_t(12);
+pub const AMDSMI_STATUS_ADDRESS_FAULT: amdsmi_status_t = amdsmi_status_t(13);
+pub const AMDSMI_STATUS_FILE_ERROR: amdsmi_status_t = amdsmi_status_t(14);
 pub const AMDSMI_STATUS_OUT_OF_RESOURCES: amdsmi_status_t = amdsmi_status_t(15);
+
+// other constants
 pub const AMDSMI_MAX_FAN_SPEED: u32 = 255;
 pub const AMDSMI_GPU_UUID_SIZE: u32 = 38;
 /* ---------- */

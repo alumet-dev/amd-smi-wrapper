@@ -13,8 +13,10 @@ use amd_smi_wrapper_sys::{load::LoadError, versions::stable};
 /// Error while using the AMD SMI library.
 #[derive(Error, Debug)]
 pub struct AmdError {
-    /// The underlying status provided by amdsmi library.
-    pub status: stable::amdsmi_status_t,
+    /// The simplified status as a high-level enum.
+    pub status: Option<SimplifiedStatus>,
+    /// The underlying status code returned by AMD SMI.
+    pub status_code: stable::amdsmi_status_t,
     /// Detailed description of the error.
     pub message: Option<String>,
 }
@@ -22,8 +24,11 @@ pub struct AmdError {
 impl Display for AmdError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match &self.message {
-            Some(msg) => write!(f, "amd-smi error {:?}: {msg}", self.status),
-            None => write!(f, "amd-smi error {:?}", self.status),
+            Some(msg) => write!(f, "amd-smi error {}: {msg}", self.status_code.0),
+            None => match self.status {
+                Some(s) => write!(f, "amd-smi error {}: {s:?}", self.status_code.0),
+                None => write!(f, "amd-smi error {}", self.status_code.0),
+            },
         }
     }
 }
@@ -49,5 +54,51 @@ pub fn status_message(
         status_string.to_str().ok().map(str::to_string)
     } else {
         None
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SimplifiedStatus {
+    Success,
+    Invalid,
+    NotSupported,
+    NotYetImplemented,
+    FailLoadModule,
+    FailLoadSymbol,
+    DrmError,
+    ApiFailed,
+    Timeout,
+    Retry,
+    NoPermission,
+    Interrupt,
+    Io,
+    AddressFault,
+    FileError,
+    OutOfResources,
+}
+
+impl TryFrom<stable::amdsmi_status_t> for SimplifiedStatus {
+    type Error = ();
+
+    fn try_from(status: stable::amdsmi_status_t) -> Result<Self, Self::Error> {
+        match status {
+            stable::AMDSMI_STATUS_SUCCESS => Ok(Self::Success),
+            stable::AMDSMI_STATUS_INVAL => Ok(Self::Invalid),
+            stable::AMDSMI_STATUS_NOT_SUPPORTED => Ok(Self::NotSupported),
+            stable::AMDSMI_STATUS_NOT_YET_IMPLEMENTED => Ok(Self::NotYetImplemented),
+            stable::AMDSMI_STATUS_FAIL_LOAD_MODULE => Ok(Self::FailLoadModule),
+            stable::AMDSMI_STATUS_FAIL_LOAD_SYMBOL => Ok(Self::FailLoadSymbol),
+            stable::AMDSMI_STATUS_DRM_ERROR => Ok(Self::DrmError),
+            stable::AMDSMI_STATUS_API_FAILED => Ok(Self::ApiFailed),
+            stable::AMDSMI_STATUS_TIMEOUT => Ok(Self::Timeout),
+            stable::AMDSMI_STATUS_RETRY => Ok(Self::Retry),
+            stable::AMDSMI_STATUS_NO_PERM => Ok(Self::NoPermission),
+            stable::AMDSMI_STATUS_INTERRUPT => Ok(Self::Interrupt),
+            stable::AMDSMI_STATUS_IO => Ok(Self::Io),
+            stable::AMDSMI_STATUS_ADDRESS_FAULT => Ok(Self::AddressFault),
+            stable::AMDSMI_STATUS_FILE_ERROR => Ok(Self::FileError),
+            stable::AMDSMI_STATUS_OUT_OF_RESOURCES => Ok(Self::OutOfResources),
+            _ => Err(()),
+        }
     }
 }
