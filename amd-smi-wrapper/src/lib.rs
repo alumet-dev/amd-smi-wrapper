@@ -12,7 +12,7 @@ mod utils;
 use amd_smi_wrapper_sys::{load::MultiVersionLib, versions::stable};
 
 use crate::{
-    error::{AmdError, AmdInitError, status_message, SimplifiedStatus},
+    error::{AmdError, AmdInitError},
     handles::{AmdSocketHandle, SocketHandle},
 };
 
@@ -57,11 +57,7 @@ impl AmdSmi {
 
     fn build_error(&self, status: stable::amdsmi_status_t) -> AmdError {
         assert_ne!(status, stable::AMDSMI_STATUS_SUCCESS);
-        AmdError {
-            status: SimplifiedStatus::try_from(status).ok(),
-            status_code: status,
-            message: status_message(&self.shared.inner.lib_stable, status),
-        }
+        AmdError::from_status_with_message(status, &self)
     }
 
     /// Initializes the AMD smi library.

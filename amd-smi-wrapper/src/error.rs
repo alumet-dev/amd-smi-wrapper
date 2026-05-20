@@ -7,7 +7,7 @@ use std::{
 };
 use thiserror::Error;
 
-use super::LIB_PATH;
+use super::{AmdSmi, LIB_PATH};
 use amd_smi_wrapper_sys::{load::LoadError, versions::stable};
 
 /// Error while using the AMD SMI library.
@@ -19,6 +19,26 @@ pub struct AmdError {
     pub status_code: stable::amdsmi_status_t,
     /// Detailed description of the error.
     pub message: Option<String>,
+}
+
+impl AmdError {
+    /// Creates a new error from a status code, without a description.
+    pub fn from_status_code(status_code: stable::amdsmi_status_t) -> Self {
+        Self {
+            status: SimplifiedStatus::try_from(status_code).ok(),
+            status_code,
+            message: None,
+        }
+    }
+
+    /// Creates a new error from a status code, and tries to find a meaningful error message for it.
+    pub fn from_status_with_message(status_code: stable::amdsmi_status_t, lib: &AmdSmi) -> Self {
+        AmdError {
+            status: SimplifiedStatus::try_from(status_code).ok(),
+            status_code,
+            message: status_message(&lib.shared.inner.lib_stable, status_code),
+        }
+    }
 }
 
 impl Display for AmdError {
