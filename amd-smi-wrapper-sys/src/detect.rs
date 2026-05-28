@@ -4,6 +4,7 @@ use super::versions;
 use libloading::Symbol;
 use thiserror::Error;
 
+#[derive(Debug)]
 pub struct AmdSmiVersion {
     /// Compatible version of ROC-m, for instance [6, 3, 0] for v6.3.0.
     pub rocm_version: [u32; 3],
