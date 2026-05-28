@@ -38,6 +38,7 @@ pub const AMDSMI_STATUS_IO: amdsmi_status_t = amdsmi_status_t(12);
 pub const AMDSMI_STATUS_ADDRESS_FAULT: amdsmi_status_t = amdsmi_status_t(13);
 pub const AMDSMI_STATUS_FILE_ERROR: amdsmi_status_t = amdsmi_status_t(14);
 pub const AMDSMI_STATUS_OUT_OF_RESOURCES: amdsmi_status_t = amdsmi_status_t(15);
+pub const AMDSMI_STATUS_UNEXPECTED_DATA: amdsmi_status_t = amdsmi_status_t(43);
 
 // other constants
 pub const AMDSMI_MAX_FAN_SPEED: u32 = 255;

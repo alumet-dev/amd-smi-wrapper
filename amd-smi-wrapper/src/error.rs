@@ -77,6 +77,7 @@ pub fn status_message(
     }
 }
 
+#[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SimplifiedStatus {
     Success,
@@ -95,6 +96,7 @@ pub enum SimplifiedStatus {
     AddressFault,
     FileError,
     OutOfResources,
+    UnexpectedData,
 }
 
 impl TryFrom<stable::amdsmi_status_t> for SimplifiedStatus {
@@ -118,6 +120,7 @@ impl TryFrom<stable::amdsmi_status_t> for SimplifiedStatus {
             stable::AMDSMI_STATUS_ADDRESS_FAULT => Ok(Self::AddressFault),
             stable::AMDSMI_STATUS_FILE_ERROR => Ok(Self::FileError),
             stable::AMDSMI_STATUS_OUT_OF_RESOURCES => Ok(Self::OutOfResources),
+            stable::AMDSMI_STATUS_UNEXPECTED_DATA => Ok(Self::UnexpectedData),
             _ => Err(()),
         }
     }
