@@ -10,4 +10,4 @@ pub mod detect;
 /// Loading of amdsmi.
 pub mod load;
 
-pub use load::load;
+pub use load::load_and_init;

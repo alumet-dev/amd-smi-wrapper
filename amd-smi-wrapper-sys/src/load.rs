@@ -12,6 +12,8 @@ use crate::{
 pub enum LoadError {
     #[error("failed to load the AMD SMI library at {1:?}")]
     Library(#[source] libloading::Error, PathBuf),
+    #[error("failed to init the AMD SMI library: error {}", .0.0)]
+    Init(stable::amdsmi_status_t),
     #[error("failed to detect the version of the AMD SMI library")]
     Detect(#[from] DetectError),
 }
@@ -30,10 +32,11 @@ pub enum VersionedLib {
     V7_2_0(v7_2_0::libamd_smi),
 }
 
-/// Load the system version of AMD SMI, detect its version and load version-specific functions.
-pub fn load(
+/// Load the system version of AMD SMI, call `amdsmi_init`, detect the library version and prepare version-specific features.
+pub fn load_and_init(
     path: impl AsRef<OsStr>,
     allow_newer_versions: bool,
+    init_flags: stable::amdsmi_init_flags_t,
 ) -> Result<MultiVersionLib, LoadError> {
     // FIXME: technically, we could do one single library load, and then use the right function definitions, but it's not supported by bindgen at the moment (it cannot generate just the definitions, it generates the struct with its version-specific methods, and the same library cannot be shared between multiple structs).
     let path = path.as_ref();
@@ -43,6 +46,12 @@ pub fn load(
     // We have no choice here.
     let lib_stable =
         unsafe { stable::libamd_smi::new(path) }.map_err(|e| LoadError::Library(e, path.into()))?;
+
+    // initialize (required before calling any other function, including get_lib_version)
+    let result = unsafe { lib_stable.amdsmi_init(init_flags.0.into()) };
+    if result != stable::AMDSMI_STATUS_SUCCESS {
+        return Err(LoadError::Init(result));
+    }
 
     // detect the right version and load version-specific methods
     let rawlib = unsafe { Library::new(path) }.map_err(|e| LoadError::Library(e, path.into()))?;

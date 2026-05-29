@@ -70,20 +70,12 @@ impl AmdSmi {
     /// ```
     pub fn init(flags: AmdInitFlags) -> Result<Self, AmdInitError> {
         log::debug!("Initializing AMD SMI...");
-        let amdsmi = amd_smi_wrapper_sys::load(LIB_PATH, true)?;
-        log::debug!("Loaded AMD SMI library. Version info: {:?}", amdsmi.version);
+        let amdsmi = amd_smi_wrapper_sys::load_and_init(LIB_PATH, true, flags)?;
+        log::debug!("AMD SMI initialized. Version info: {:?}", amdsmi.version);
+
         let instance = AmdSmi {
             shared: Arc::new(LibAmdSmi { inner: amdsmi }),
         };
-
-        log::debug!("Calling amdsmi_init({flags:?})...");
-        // SAFETY: The function expects a valid library instance and valid flags.
-        // According to the AMD-SMI documentation, the function fully initializes internal structures for GPU discovery.
-        // The return code `amdsmi_status_t` is checked to ensure initialization succeeded before using the library.
-        let status = unsafe { instance.shared.inner.lib_stable.amdsmi_init(flags.0.into()) };
-        instance.check_status(status)?;
-        log::debug!("AMD SMI is ready.");
-
         Ok(instance)
     }
 

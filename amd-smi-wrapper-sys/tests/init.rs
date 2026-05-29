@@ -1,6 +1,6 @@
 use amd_smi_wrapper_sys::load::{MultiVersionLib, VersionedLib};
 use amd_smi_wrapper_sys::versions::stable::AMDSMI_STATUS_SUCCESS;
-use amd_smi_wrapper_sys::{load, versions};
+use amd_smi_wrapper_sys::{load_and_init, versions};
 use std::mem::MaybeUninit;
 
 fn run_gpu_tests() -> bool {
@@ -18,7 +18,8 @@ fn load_multiversion() {
         return;
     }
 
-    let lib = load("libamd_smi.so", true).expect("load failure");
+    let flags = versions::stable::amdsmi_init_flags_t::AMDSMI_INIT_AMD_GPUS;
+    let lib = load_and_init("libamd_smi.so", true, flags).expect("load failure");
     println!("AMD SMI version: {:?}", lib.version);
 
     // Call the version-specific amdsmi_get_lib_version(*amdsmi_version_t) and check that we get coherent data.

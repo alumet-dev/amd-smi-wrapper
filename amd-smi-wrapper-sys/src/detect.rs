@@ -1,6 +1,7 @@
 use std::mem::MaybeUninit;
 
 use super::versions;
+use crate::versions::stable;
 use libloading::Symbol;
 use thiserror::Error;
 
@@ -22,6 +23,8 @@ pub enum DetectError {
     UnsupportedOld([u32; 4]),
     #[error("unsupported version of AMD SMI: {} - only versions <= 26.2.1 are supported", format_version(.0))]
     UnsupportedNew([u32; 4]),
+    #[error("failed to get the version of the AMD SMI library: error {}", .0.0)]
+    GetVersion(stable::amdsmi_status_t),
 }
 
 fn format_version(v: &[u32; 4]) -> String {
@@ -37,7 +40,10 @@ pub fn detect_version(
     // Let's call the newest version and change if it's wrong.
     let version_fn: Symbol<VersionFn> = unsafe { library.get(b"amdsmi_get_lib_version") }?;
     let mut version: MaybeUninit<amdsmi_version_unknown> = MaybeUninit::uninit();
-    unsafe { (*version_fn)(version.as_mut_ptr()) };
+    let result = unsafe { (*version_fn)(version.as_mut_ptr()) };
+    if result != stable::AMDSMI_STATUS_SUCCESS {
+        return Err(DetectError::GetVersion(result));
+    }
     let version = unsafe { version.assume_init() };
 
     // SAFETY: the first field is the same in both v6 and v7, so it's ok to read either.
