@@ -56,7 +56,7 @@ pub fn detect_version(
             full_version_v7.release,
             0,
         ];
-        let is_officially_supported = smi_version <= [26, 2, 1, 0];
+        let is_officially_supported = smi_version <= [26, 2, 2, 0];
 
         if !is_officially_supported && !allow_newer_versions {
             return Err(DetectError::UnsupportedNew(smi_version));
