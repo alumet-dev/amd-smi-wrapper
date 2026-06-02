@@ -98,7 +98,7 @@ pub trait ProcessorHandle {
     /// Retrieves globals [`AmdAsicInfo`] information about a GPU device.
     fn device_asic_info(&self) -> Result<AmdAsicInfo, AmdError>;
 
-    /// Retrieves a [`AmdClkInfo`] structure containing data about detected clock devices.
+    /// Retrieves metrics about the GPU clock.
     ///
     /// # Arguments
     ///
@@ -121,12 +121,12 @@ pub trait ProcessorHandle {
     /// Retrieves the PCI bus traffic used by the GPU device.
     fn device_pci_usage(&self) -> Result<AmdPciTraffic, AmdError>;
 
-    /// Retrieves a [`AmdPowerConsumption`] structure containing all data about GPU device power consumption.
-    fn device_power_consumption(&self) -> Result<AmdPowerInfo, AmdError>;
+    /// Retrieves a [`AmdPowerInfo`] structure containing all data about GPU device power consumption.
+    fn device_power_info(&self) -> Result<AmdPowerInfo, AmdError>;
     /// Retrieves the power management status accessability of the GPU device.
     fn is_power_managment_enabled(&self) -> Result<bool, AmdError>;
 
-    /// Retrieves a set of [`AmdProcess`] structure containing data about running processes on the GPU device.
+    /// Retrieves data about the processes that are currently running on the GPU device.
     fn device_process_list(&self) -> Result<Vec<AmdProcessInfo>, AmdError>;
 
     /// Retrieves the temperature of a given area of the GPU device.
@@ -270,8 +270,7 @@ impl ProcessorHandle for AmdProcessorHandle {
         Ok(usage)
     }
 
-    /// Retrieves a [`amdsmi_power_info_t`] structure containing all data about GPU device power consumption.
-    fn device_power_consumption(&self) -> Result<AmdPowerInfo, AmdError> {
+    fn device_power_info(&self) -> Result<AmdPowerInfo, AmdError> {
         AmdPowerInfo::get(self)
     }
 

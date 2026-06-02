@@ -7,14 +7,14 @@ use amd_smi_wrapper_sys::{
 
 use crate::handles::AmdProcessorHandle;
 
-/// Parameters about power consumption: [`amdsmi_power_info_t`].
+/// Power consumption metrics.
 ///
 /// ## Measurement Units
-/// The units described here come from AMD SMI documentation for the `linux_bm` platform, which means "Linux bare-metal". On other platforms, such as `host` (virtualization hypervisor), the units can change.
+/// The units described here come from AMD SMI documentation for the `linux_bm` platform, which means "Linux bare-metal".
+/// On other platforms, such as `host` (virtualization hypervisor), the units can change.
 ///
 /// ## Unsupported Values
-/// In the low-level AMD SMI, unsupported members are represented with special values. "Unsupported struct members are set to UINT32_MAX"
-/// (TODO check that it's really the case, there are some instances of 0xFFFF in the golang wrapper).
+/// In the low-level AMD SMI, unsupported members are represented with special values.
 /// On top of that, some fields did not exist in early versions of AMD SMI.
 /// We represent both situations as `None`.
 #[derive(Debug, Default, Clone, Copy)]

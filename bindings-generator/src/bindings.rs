@@ -25,6 +25,12 @@ pub struct ItemFilter {
 pub struct ItemSet(HashSet<String>);
 
 impl ItemSet {
+    /// Parses a file line by line.
+    ///
+    /// # Format
+    /// - 1 line = 1 item
+    /// - leading and trailing whitespaces are removed
+    /// - comments are supported: a line starting with `#` is ignored
     pub fn parse(path: &Path) -> Self {
         let mut items = HashSet::default();
         let content = std::fs::read_to_string(path).expect("failed to read whitelist");
@@ -37,16 +43,19 @@ impl ItemSet {
         Self(items)
     }
 
+    /// Creates a set from an iterator.
     pub fn from_iter(items: impl IntoIterator<Item = impl AsRef<str>>) -> Self {
         let items = items.into_iter().map(|i| i.as_ref().to_owned()).collect();
         Self(items)
     }
 
+    /// Adds multiple items to the set.
     pub fn extend(&mut self, items: impl IntoIterator<Item = impl AsRef<str>>) {
         self.0
             .extend(items.into_iter().map(|i| i.as_ref().to_owned()));
     }
 
+    /// Removes multiple items from the set.
     pub fn remove_all(&mut self, items: impl IntoIterator<Item = impl AsRef<str>>) {
         for item in items {
             self.0.remove(item.as_ref());
@@ -69,7 +78,7 @@ pub fn generate_bindings(c_input: &Path, filter: &ItemFilter, rust_output: &Path
             is_bitfield: false,
             is_global: false,
         })
-        .raw_line(format!("/* generated from: {} */", header_file_name));
+        .raw_line(format!("/* generated from: {header_file_name} */"));
 
     for item in &filter.whitelist.0 {
         builder = builder.allowlist_item(item);

@@ -4,7 +4,7 @@ use amd_smi_wrapper_sys::versions::stable;
 
 use crate::handles::AmdProcessorHandle;
 
-/// Parameters about [`amdsmi_clk_info_t`].
+/// GPU clock metrics.
 #[derive(Debug, Default, Clone)]
 pub struct AmdClockInfo {
     /// Clock frequency in MHz.

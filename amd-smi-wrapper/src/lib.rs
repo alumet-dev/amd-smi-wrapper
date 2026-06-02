@@ -1,3 +1,56 @@
+//! High-level wrapper for AMD SMI.
+//!
+//! The AMD SMI library is _dynamically_ loaded.
+//! You don't need to have AMD SMI installed to compile this crate.
+//!
+//! # Example
+//! ```no_run
+//! use amd_smi_wrapper::{AmdSmi, AmdInitFlags, AmdInterface};
+//! use amd_smi_wrapper::handles::{ProcessorHandle, SocketHandle};
+//!
+//! let amdsmi = AmdSmi::init(AmdInitFlags::AMDSMI_INIT_AMD_GPUS)?;
+//!
+//! let version = amdsmi.version().smi_version;
+//! println!("loaded AMD SMI version {}.{}.{}.{}", version[0], version[1], version[2], version[3]);
+//!
+//! for socket in amdsmi.socket_handles()? {
+//!     for proc in socket.processor_handles()? {
+//!         let uuid = proc.device_uuid()?;
+//!         println!("Detected GPU: {uuid}");
+//!         let power_info = proc.device_power_info()?;
+//!         match power_info.current_socket_power {
+//!             Some(power) => {
+//!                 println!("Current Power (W): {power}");
+//!             }
+//!             None => {
+//!                 // not all GPUs support power metrics
+//!                 println!("Current Power (W): unsupported");
+//!             }
+//!         }
+//!     }
+//! }
+//! # Ok::<(), Box<dyn std::error::Error>>(())
+//! ```
+//!
+//! # Multi-version Support
+//!
+//! Unfortunately, each version of AMD SMI can introduce breaking changes, and
+//! [has in the past](https://github.com/alumet-dev/amd-smi-wrapper/issues/3), even between minor versions!
+//!
+//! This crate **automatically detects** the version of AMD SMI and adapts to the available features.
+//! Some metrics are only available with the most recent versions of AMD SMI and/or the most recent GPUs.
+//! That is why some fields in metric structures are `Option`s.
+//! One example of that is [`metrics::power_info::AmdPowerInfo::current_socket_power`].
+//!
+//! You can check [`AmdSmiVersion::is_officially_supported`] to see whether the version of AMD SMI that is installed on the system has been tested with this crate.
+//! If this flag is `false`, it may or may not work, depending on the compatibility efforts of AMD.
+//!
+//! Currently supported versions: ROCm **v6.3.0 - v7.2.x**
+//!
+//! # Mocking Support
+//!
+//! With `amd-smi-wrapper`, you can easily create mock structure for your tests.
+//! To do so, enable the `mock` feature and use [`MockAmdInterface`].
 #![deny(unsafe_op_in_unsafe_fn)]
 use std::{ptr::null_mut, sync::Arc};
 
@@ -31,7 +84,6 @@ struct LibAmdSmi {
 /// # Shutdown
 /// The library is automatically shut down when `AmdSmi` is dropped.
 /// The `Drop` implementation of `AmdSmi` ignores shutdown errors.
-/// To handle the error, call [`AmdInterface::stop`].
 #[derive(Clone)]
 pub struct AmdSmi {
     shared: Arc<LibAmdSmi>,

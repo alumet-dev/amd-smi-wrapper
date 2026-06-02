@@ -1,3 +1,4 @@
+//! Metrics data structure and multi-version helpers.
 use amd_smi_wrapper_sys::versions::stable;
 
 pub mod asic_info;
@@ -23,7 +24,7 @@ pub struct AmdEnergyConsumption {
     pub timestamp: u64,
 }
 
-/// Parameters about the engine activity usage: [`amdsmi_engine_usage_t`].
+/// Parameters about the engine activity usage.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct AmdEngineUsage {
     /// Main graphic core of AMD GPU, in percentage.
