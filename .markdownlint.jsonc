@@ -4,10 +4,7 @@
   // MD032/blanks-around-lists : Lists should be surrounded by blank lines : https://github.com/DavidAnson/markdownlint/blob/v0.37.3/doc/md032.md
   "MD032": false,
   // MD029/ol-prefix : Ordered list item prefix : https://github.com/DavidAnson/markdownlint/blob/v0.37.3/doc/md029.md
-  "MD029": {
-    // List style
-    "style": "one_or_ordered"
-  },
+  "MD029": false,
   // MD013/line-length : Line length : https://github.com/DavidAnson/markdownlint/blob/v0.37.3/doc/md013.md
   "MD013": false,
   // MD034/no-bare-urls : Bare URL used : https://github.com/DavidAnson/markdownlint/blob/v0.37.3/doc/md034.md

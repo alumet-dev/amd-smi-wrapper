@@ -1,4 +1,4 @@
 amdsmi
 asic
 Navi
-regen
+rocm

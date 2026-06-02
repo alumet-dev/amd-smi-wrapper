@@ -3,18 +3,18 @@ use amd_smi_wrapper::{
     handles::{ProcessorHandle, SocketHandle},
 };
 
-fn skip_gpu_tests() -> bool {
-    if std::env::var_os("NO_GPU").is_some() {
-        println!("test skipped because NO_GPU is set");
+fn run_gpu_tests() -> bool {
+    if std::env::var_os("TEST_GPU").is_some() {
         true
     } else {
+        println!("test skipped because TEST_GPU is not set");
         false
     }
 }
 
 #[test]
 fn list_devices() {
-    if skip_gpu_tests() {
+    if !run_gpu_tests() {
         return;
     }
 

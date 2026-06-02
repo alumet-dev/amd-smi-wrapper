@@ -1,3 +1,57 @@
+//! High-level wrapper for AMD SMI.
+//!
+//! The AMD SMI library is _dynamically_ loaded.
+//! You don't need to have AMD SMI installed to compile this crate.
+//!
+//! # Example
+//! ```no_run
+//! use amd_smi_wrapper::{AmdSmi, AmdInitFlags, AmdInterface};
+//! use amd_smi_wrapper::handles::{ProcessorHandle, SocketHandle};
+//!
+//! let amdsmi = AmdSmi::init(AmdInitFlags::AMDSMI_INIT_AMD_GPUS)?;
+//!
+//! let version = amdsmi.version().smi_version;
+//! println!("loaded AMD SMI version {}.{}.{}.{}", version[0], version[1], version[2], version[3]);
+//!
+//! for socket in amdsmi.socket_handles()? {
+//!     for proc in socket.processor_handles()? {
+//!         let uuid = proc.device_uuid()?;
+//!         println!("Detected GPU: {uuid}");
+//!         let power_info = proc.device_power_info()?;
+//!         match power_info.current_socket_power {
+//!             Some(power) => {
+//!                 println!("Current Power (W): {power}");
+//!             }
+//!             None => {
+//!                 // not all GPUs support power metrics
+//!                 println!("Current Power (W): unsupported");
+//!             }
+//!         }
+//!     }
+//! }
+//! # Ok::<(), Box<dyn std::error::Error>>(())
+//! ```
+//!
+//! # Multi-version Support
+//!
+//! Unfortunately, each version of AMD SMI can introduce breaking changes, and
+//! [has in the past](https://github.com/alumet-dev/amd-smi-wrapper/issues/3), even between minor versions!
+//!
+//! This crate **automatically detects** the version of AMD SMI and adapts to the available features.
+//! Some metrics are only available with the most recent versions of AMD SMI and/or the most recent GPUs.
+//! That is why some fields in metric structures are `Option`s.
+//! One example of that is [`metrics::power_info::AmdPowerInfo::current_socket_power`].
+//!
+//! You can check [`AmdSmiVersion::is_officially_supported`] to see whether the version of AMD SMI that is installed on the system has been tested with this crate.
+//! If this flag is `false`, it may or may not work, depending on the compatibility efforts of AMD.
+//!
+//! Currently supported versions: ROCm **v6.3.0 - v7.2.x**
+//!
+//! # Mocking Support
+//!
+//! With `amd-smi-wrapper`, you can easily create mock structure for your tests.
+//! To do so, enable the `mock` feature and use [`MockAmdInterface`].
+#![deny(unsafe_op_in_unsafe_fn)]
 use std::{ptr::null_mut, sync::Arc};
 
 #[cfg(feature = "mock")]
@@ -8,22 +62,21 @@ pub mod handles;
 pub mod metrics;
 mod utils;
 
-use amd_smi_wrapper_sys as bindings;
-
 use crate::{
-    bindings::{amdsmi_init_flags_t, amdsmi_status_t, libamd_smi},
-    error::{AmdError, AmdInitError, AmdStatus, status_message},
+    error::{AmdError, AmdInitError},
     handles::{AmdSocketHandle, SocketHandle},
 };
+use amd_smi_wrapper_sys::detect::AmdSmiVersion;
+use amd_smi_wrapper_sys::{load::MultiVersionLib, versions::stable};
 
 pub(crate) const LIB_PATH: &str = "libamd_smi.so";
 
 /// Initialization flags for the library.
 /// See [`AmdSmi::init`].
-pub type AmdInitFlags = amdsmi_init_flags_t;
+pub type AmdInitFlags = stable::amdsmi_init_flags_t;
 
 struct LibAmdSmi {
-    amdsmi: libamd_smi,
+    inner: MultiVersionLib,
 }
 
 /// Main wrapper around the AMD SMI library.
@@ -31,10 +84,9 @@ struct LibAmdSmi {
 /// # Shutdown
 /// The library is automatically shut down when `AmdSmi` is dropped.
 /// The `Drop` implementation of `AmdSmi` ignores shutdown errors.
-/// To handle the error, call [`AmdInterface::stop`].
 #[derive(Clone)]
 pub struct AmdSmi {
-    amdsmi: Arc<LibAmdSmi>,
+    shared: Arc<LibAmdSmi>,
 }
 
 impl Drop for LibAmdSmi {
@@ -42,20 +94,22 @@ impl Drop for LibAmdSmi {
         // Shut down the AMD-SMI library and release all internal resources.
         // SAFETY: The function expects a valid, initialized library instance.
         // The shutdown is called only once when the last reference is dropped.
-        unsafe { self.amdsmi.amdsmi_shut_down() };
+        unsafe { self.inner.lib_stable.amdsmi_shut_down() };
     }
 }
 
 impl AmdSmi {
     /// Checking the value of [`amdsmi_status_t`] to return an error or success.
-    fn check_status(&self, status: amdsmi_status_t) -> Result<(), AmdError> {
+    fn check_status(&self, status: stable::amdsmi_status_t) -> Result<(), AmdError> {
         match status {
-            AmdStatus::AMDSMI_STATUS_SUCCESS => Ok(()),
-            status => Err(AmdError {
-                status,
-                message: status_message(&self.amdsmi.amdsmi, status),
-            }),
+            stable::AMDSMI_STATUS_SUCCESS => Ok(()),
+            other => Err(self.build_error(other)),
         }
+    }
+
+    fn build_error(&self, status: stable::amdsmi_status_t) -> AmdError {
+        assert_ne!(status, stable::AMDSMI_STATUS_SUCCESS);
+        AmdError::from_status_with_message(status, self)
     }
 
     /// Initializes the AMD smi library.
@@ -67,20 +121,19 @@ impl AmdSmi {
     /// let amdsmi = AmdSmi::init(AmdInitFlags::AMDSMI_INIT_AMD_GPUS).expect("init failed");
     /// ```
     pub fn init(flags: AmdInitFlags) -> Result<Self, AmdInitError> {
-        // SAFETY: The library must exist at the specified path, otherwise `libamd_smi::new` returns an error.
-        // This operation involves raw FFI interaction and assumes the dynamic loader succeeds.
-        let amdsmi = unsafe { libamd_smi::new(LIB_PATH)? };
+        log::debug!("Initializing AMD SMI...");
+        let amdsmi = amd_smi_wrapper_sys::load_and_init(LIB_PATH, true, flags)?;
+        log::debug!("AMD SMI initialized. Version info: {:?}", amdsmi.version);
+
         let instance = AmdSmi {
-            amdsmi: Arc::new(LibAmdSmi { amdsmi }),
+            shared: Arc::new(LibAmdSmi { inner: amdsmi }),
         };
-
-        // SAFETY: The function expects a valid library instance and valid flags.
-        // According to the AMD-SMI documentation, the function fully initializes internal structures for GPU discovery.
-        // The return code `amdsmi_status_t` is checked to ensure initialization succeeded before using the library.
-        let status = unsafe { instance.amdsmi.amdsmi.amdsmi_init(flags.0.into()) };
-        instance.check_status(status)?;
-
         Ok(instance)
+    }
+
+    /// Version info about the AMD SMI library that has been loaded.
+    pub fn version(&self) -> &AmdSmiVersion {
+        &self.shared.inner.version
     }
 }
 
@@ -110,8 +163,9 @@ impl AmdInterface for AmdSmi {
         // Query the number of available GPU socket handles.
         // SAFETY: According to the AMD-SMI documentation, passing `null_mut()` is safe which sets `socket_count` to the number of sockets in the system.
         let result = unsafe {
-            self.amdsmi
-                .amdsmi
+            self.shared
+                .inner
+                .lib_stable
                 .amdsmi_get_socket_handles(&mut socket_count, null_mut())
         };
         self.check_status(result)?;
@@ -121,10 +175,11 @@ impl AmdInterface for AmdSmi {
 
         // Fill the buffer with socket handles.
         // SAFETY: `socket_handles.as_mut_ptr()` points to memory of sufficient size.
-        // According the AMD-SMI library documentation, the function writes at most `socket_count` handles, so no out-of-bounds write occurs.
+        // According to the AMD-SMI library documentation, the function writes at most `socket_count` handles, so no out-of-bounds write occurs.
         let result = unsafe {
-            self.amdsmi
-                .amdsmi
+            self.shared
+                .inner
+                .lib_stable
                 .amdsmi_get_socket_handles(&mut socket_count, socket_handles.as_mut_ptr())
         };
         self.check_status(result)?;
