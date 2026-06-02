@@ -26,7 +26,7 @@ fn run_single(args: cli::Single) {
     bindings::generate_bindings(&args.input_header, &filter, &args.output);
 }
 
-const ALWAYS_EMIT_IN_PARTIAL_MODULES: &[&'static str] = &[
+const ALWAYS_EMIT_IN_PARTIAL_MODULES: &[&str] = &[
     "AMDSMI_LIB_VERSION_YEAR",
     "AMDSMI_LIB_VERSION_MAJOR",
     "AMDSMI_LIB_VERSION_MINOR",
@@ -100,7 +100,7 @@ fn run_history(args: cli::History) {
         });
     }
 
-    // generate the base version and the partial versions
+    // generate the next (specific) versions
     for diff in report.changes_per_version {
         if diff.changed.breaking.is_empty() && diff.changed.dubious.is_empty() {
             // Note that we're not interested in backward-compatible changes.

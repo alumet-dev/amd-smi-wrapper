@@ -109,7 +109,7 @@ impl AmdSmi {
 
     fn build_error(&self, status: stable::amdsmi_status_t) -> AmdError {
         assert_ne!(status, stable::AMDSMI_STATUS_SUCCESS);
-        AmdError::from_status_with_message(status, &self)
+        AmdError::from_status_with_message(status, self)
     }
 
     /// Initializes the AMD smi library.
