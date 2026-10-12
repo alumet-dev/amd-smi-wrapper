@@ -13,6 +13,17 @@ pub type AmdTemperatureType = stable::amdsmi_temperature_type_t;
 pub type AmdVoltageMetric = stable::amdsmi_voltage_metric_t;
 pub type AmdVoltageType = stable::amdsmi_voltage_type_t;
 
+/// Filter out unsupported values.
+///
+/// # What value does AMD SMI use when it's unsupported?
+///
+/// The doc reads "Unsupported struct members are set to UINT32_MAX",
+/// but the ROCm code uses 0xFFFF (u16::MAX), so...
+/// We treat both as "unsupported".
+pub(crate) fn maybe_unsupported(v: u32) -> Option<u32> {
+    Some(v).filter(|v| *v != u32::MAX && *v != 0xFFFF)
+}
+
 /// Parameters about energy consumption of a GPU.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct AmdEnergyConsumption {
@@ -28,19 +39,19 @@ pub struct AmdEnergyConsumption {
 #[derive(Debug, Default, Clone, Copy)]
 pub struct AmdEngineUsage {
     /// Main graphic core of AMD GPU, in percentage.
-    pub gfx_activity: u32,
+    pub gfx_activity: Option<u32>,
     /// Manage memory access and addresses translation, in percentage.
-    pub mm_activity: u32,
+    pub mm_activity: Option<u32>,
     /// Memory controller managing access to VRAM in organizing writing/reading operations, in percentage.
-    pub umc_activity: u32,
+    pub umc_activity: Option<u32>,
 }
 
 impl From<stable::amdsmi_engine_usage_t> for AmdEngineUsage {
     fn from(info: stable::amdsmi_engine_usage_t) -> Self {
         Self {
-            gfx_activity: info.gfx_activity,
-            mm_activity: info.mm_activity,
-            umc_activity: info.umc_activity,
+            gfx_activity: maybe_unsupported(info.gfx_activity),
+            mm_activity: maybe_unsupported(info.mm_activity),
+            umc_activity: maybe_unsupported(info.umc_activity),
         }
     }
 }

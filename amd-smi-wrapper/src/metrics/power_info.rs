@@ -5,6 +5,7 @@ use amd_smi_wrapper_sys::{
     versions::{v6_3_0, v6_4_0, v7_0_0},
 };
 
+use super::maybe_unsupported;
 use crate::handles::AmdProcessorHandle;
 
 /// Power consumption metrics.
@@ -76,15 +77,6 @@ impl AmdPowerInfo {
         };
         Ok(info)
     }
-}
-
-/// Filter out unsupported values.
-///
-/// # What value does AMD SMI use when it's unsupported?
-/// The doc reads "Unsupported struct members are set to UINT32_MAX",
-/// but the ROCm code uses 0xFFFF (u16::MAX), so...
-fn maybe_unsupported(v: u32) -> Option<u32> {
-    Some(v).filter(|v| *v != u32::MAX && *v != 0xFFFF)
 }
 
 impl From<v6_3_0::amdsmi_power_info_t> for AmdPowerInfo {
