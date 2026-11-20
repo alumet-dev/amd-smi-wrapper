@@ -205,6 +205,11 @@ impl From<v6_4_0::amdsmi_proc_info_t> for AmdProcessInfo {
         }
     }
 }
+
+/// This is not documented, but amd-smi's implementation clearly shows that
+/// `cu_occupancy` can take this special value when it's "invalid".
+const OCCUPANCY_INVALID: u32 = u32::MAX;
+
 impl From<v6_4_2::amdsmi_proc_info_t> for AmdProcessInfo {
     fn from(info: v6_4_2::amdsmi_proc_info_t) -> Self {
         Self {
@@ -221,7 +226,7 @@ impl From<v6_4_2::amdsmi_proc_info_t> for AmdProcessInfo {
                 vram_mem: info.memory_usage.vram_mem,
             },
             container_name: c_buffer_to_string(&info.container_name),
-            cu_occupancy: Some(info.cu_occupancy),
+            cu_occupancy: Some(info.cu_occupancy).filter(|v| *v != OCCUPANCY_INVALID),
             evicted_time: None,
         }
     }
@@ -243,7 +248,7 @@ impl From<v7_2_0::amdsmi_proc_info_t> for AmdProcessInfo {
                 vram_mem: info.memory_usage.vram_mem,
             },
             container_name: c_buffer_to_string(&info.container_name),
-            cu_occupancy: Some(info.cu_occupancy),
+            cu_occupancy: Some(info.cu_occupancy).filter(|v| *v != OCCUPANCY_INVALID),
             evicted_time: Some(info.evicted_time),
         }
     }
