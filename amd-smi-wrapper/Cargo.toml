@@ -2,6 +2,7 @@
 name = "amd-smi-wrapper"
 version = "0.7.1"
 edition = "2024"
+license.workspace = true
 
 [features]
 mock = ["dep:mockall"]
