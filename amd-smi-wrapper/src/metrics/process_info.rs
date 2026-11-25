@@ -59,31 +59,34 @@ impl AmdProcessInfo {
         }
 
         impl ProcList {
-            fn with_capacity(lib: &VersionedLib, capacity: usize) -> Self {
+            fn new_zeroed(lib: &VersionedLib, capacity: usize) -> Self {
+                // It can happen that some fields of the proc_info_t are NOT filled by amdsmi_get_gpu_process_list.
+                // To avoid uninitialized reads, we need to initialize them first.
                 match lib {
-                    VersionedLib::V6_3_0(_) => ProcList::V6_3_0(Vec::with_capacity(capacity)),
-                    VersionedLib::V6_4_0(_) => ProcList::V6_4_0(Vec::with_capacity(capacity)),
-                    VersionedLib::V6_4_2(_) => ProcList::V6_4_2(Vec::with_capacity(capacity)),
-                    VersionedLib::V7_0_0(_) => ProcList::V6_4_2(Vec::with_capacity(capacity)),
-                    VersionedLib::V7_2_0(_) => ProcList::V7_2_0(Vec::with_capacity(capacity)),
+                    VersionedLib::V6_3_0(_) => {
+                        ProcList::V6_3_0(vec![MaybeUninit::zeroed(); capacity])
+                    }
+                    VersionedLib::V6_4_0(_) => {
+                        ProcList::V6_4_0(vec![MaybeUninit::zeroed(); capacity])
+                    }
+                    VersionedLib::V6_4_2(_) => {
+                        ProcList::V6_4_2(vec![MaybeUninit::zeroed(); capacity])
+                    }
+                    VersionedLib::V7_0_0(_) => {
+                        ProcList::V6_4_2(vec![MaybeUninit::zeroed(); capacity])
+                    }
+                    VersionedLib::V7_2_0(_) => {
+                        ProcList::V7_2_0(vec![MaybeUninit::zeroed(); capacity])
+                    }
                 }
             }
 
-            unsafe fn set_len(&mut self, len: usize) {
+            fn resize(&mut self, new_len: usize) {
                 match self {
-                    ProcList::V6_3_0(v) => unsafe { v.set_len(len) },
-                    ProcList::V6_4_0(v) => unsafe { v.set_len(len) },
-                    ProcList::V6_4_2(v) => unsafe { v.set_len(len) },
-                    ProcList::V7_2_0(v) => unsafe { v.set_len(len) },
-                }
-            }
-
-            fn reserve_exact(&mut self, cap: usize) {
-                match self {
-                    ProcList::V6_3_0(v) => v.reserve_exact(cap),
-                    ProcList::V6_4_0(v) => v.reserve_exact(cap),
-                    ProcList::V6_4_2(v) => v.reserve_exact(cap),
-                    ProcList::V7_2_0(v) => v.reserve_exact(cap),
+                    ProcList::V6_3_0(v) => v.resize(new_len, MaybeUninit::zeroed()),
+                    ProcList::V6_4_0(v) => v.resize(new_len, MaybeUninit::zeroed()),
+                    ProcList::V6_4_2(v) => v.resize(new_len, MaybeUninit::zeroed()),
+                    ProcList::V7_2_0(v) => v.resize(new_len, MaybeUninit::zeroed()),
                 }
             }
 
@@ -97,6 +100,8 @@ impl AmdProcessInfo {
             }
 
             fn into_high_level(self) -> Vec<AmdProcessInfo> {
+                // SAFETY: some fields have been filled by amdsmi, and we have initialized the rest to zero,
+                // which is a valid value for every field.
                 match self {
                     ProcList::V6_3_0(v) => v
                         .into_iter()
@@ -122,7 +127,7 @@ impl AmdProcessInfo {
         const INITIAL_CAPACITY: usize = 32;
 
         let mut list =
-            ProcList::with_capacity(&handle.amdsmi.shared.inner.lib_versioned, INITIAL_CAPACITY);
+            ProcList::new_zeroed(&handle.amdsmi.shared.inner.lib_versioned, INITIAL_CAPACITY);
         let mut count = INITIAL_CAPACITY as u32;
         let mut tries = 0;
         loop {
@@ -136,11 +141,12 @@ impl AmdProcessInfo {
             };
             match res {
                 AMDSMI_STATUS_SUCCESS => {
-                    unsafe { list.set_len(count as usize) };
+                    list.resize(count as usize);
                     break;
                 }
                 AMDSMI_STATUS_OUT_OF_RESOURCES => {
-                    list.reserve_exact(count as usize);
+                    list.resize(count as usize);
+                    // try again
                 }
                 err => return Err(handle.amdsmi.build_error(err)),
             }
@@ -199,6 +205,11 @@ impl From<v6_4_0::amdsmi_proc_info_t> for AmdProcessInfo {
         }
     }
 }
+
+/// This is not documented, but amd-smi's implementation clearly shows that
+/// `cu_occupancy` can take this special value when it's "invalid".
+const OCCUPANCY_INVALID: u32 = u32::MAX;
+
 impl From<v6_4_2::amdsmi_proc_info_t> for AmdProcessInfo {
     fn from(info: v6_4_2::amdsmi_proc_info_t) -> Self {
         Self {
@@ -215,7 +226,7 @@ impl From<v6_4_2::amdsmi_proc_info_t> for AmdProcessInfo {
                 vram_mem: info.memory_usage.vram_mem,
             },
             container_name: c_buffer_to_string(&info.container_name),
-            cu_occupancy: Some(info.cu_occupancy),
+            cu_occupancy: Some(info.cu_occupancy).filter(|v| *v != OCCUPANCY_INVALID),
             evicted_time: None,
         }
     }
@@ -237,7 +248,7 @@ impl From<v7_2_0::amdsmi_proc_info_t> for AmdProcessInfo {
                 vram_mem: info.memory_usage.vram_mem,
             },
             container_name: c_buffer_to_string(&info.container_name),
-            cu_occupancy: Some(info.cu_occupancy),
+            cu_occupancy: Some(info.cu_occupancy).filter(|v| *v != OCCUPANCY_INVALID),
             evicted_time: Some(info.evicted_time),
         }
     }
